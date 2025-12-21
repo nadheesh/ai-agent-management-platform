@@ -52,11 +52,13 @@ export async function getTrace(
   }
   const token = getToken ? await getToken() : undefined;
   
-  // Note: envId is validated but not sent to backend as per Go service implementation
-  // API path: GET /orgs/{orgName}/projects/{projName}/agents/{agentName}/trace/{traceId}
+  // API path: GET /orgs/{orgName}/projects/{projName}/agents/{agentName}/trace/{traceId}?environment={envId}
   const res = await httpGET(
     `${SERVICE_BASE}/orgs/${orgName}/projects/${projName}/agents/${agentName}/trace/${traceId}`,
     {
+      searchParams: {
+        environment: envId!, // Required parameter (validated above)
+      },
       token,
     }
   );
@@ -92,19 +94,20 @@ export async function getTraceList(
   }
   const token = getToken ? await getToken() : undefined;
 
-  const searchParams: Record<string, string> = {};
+  const searchParams: Record<string, string> = {
+    environment: envId!, // Required parameter (validated above)
+  };
   if (startTime) searchParams.startTime = startTime;
   if (endTime) searchParams.endTime = endTime;
   if (limit !== undefined) searchParams.limit = limit.toString();
   if (offset !== undefined) searchParams.offset = offset.toString();
   if (sortOrder) searchParams.sortOrder = sortOrder;
 
-  // Note: envId is validated but not sent to backend as per Go service implementation
   // API path: GET /orgs/{orgName}/projects/{projName}/agents/{agentName}/traces
   const res = await httpGET(
     `${SERVICE_BASE}/orgs/${orgName}/projects/${projName}/agents/${agentName}/traces`,
     {
-      searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
+      searchParams,
       token,
     }
   );

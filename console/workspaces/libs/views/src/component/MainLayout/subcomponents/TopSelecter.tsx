@@ -23,7 +23,6 @@ import {
   ButtonBase,
   Chip,
   Divider,
-  IconButton,
   Menu,
   MenuItem,
   MenuList,
@@ -147,29 +146,42 @@ export function TopSelecter(props: TopSelecterProps) {
                 >
                   {selectedOption?.label || 'Select an option'}
                 </Typography>
-                <IconButton
-                  size="small"
+                <Box
+                  component="span"
                   onClick={handleClick}
                   sx={{
                     borderRadius: 0.5,
                     padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
                   }}
                 >
                   {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </IconButton>
+                </Box>
               </Box>
             </Box>
             {onClose ? (
-              <IconButton
-                size="small"
-                disabled={disableClose}
+              <Box
+                component="span"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClose();
+                  if (!disableClose) {
+                    onClose();
+                  }
+                }}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: disableClose ? 'not-allowed' : 'pointer',
+                  opacity: disableClose ? 0.5 : 1,
+                  padding: 0.5,
                 }}
               >
                 <CloseOutlined size={16} />
-              </IconButton>
+              </Box>
             ) : (
               <Box width={1.75} />
             )}

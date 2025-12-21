@@ -16,11 +16,10 @@
  * under the License.
  */
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import {
   Typography,
   Chip,
-  Button,
   Box,
   Skeleton,
   ButtonBase,
@@ -29,6 +28,8 @@ import {
   InputAdornment,
   CircularProgress,
   IconButton,
+  Tooltip,
+  TextField,
 } from "@wso2/oxygen-ui";
 import {
   DataListingTable,
@@ -49,8 +50,8 @@ import dayjs from "dayjs";
 import {
   Clock as AccessTimeOutlined,
   RefreshCcw,
-  Eye as RemoveRedEyeOutlined,
   Workflow,
+  Search,
 } from "@wso2/oxygen-ui-icons-react";
 import { TracesTopCards } from "./TracesTopCards";
 
@@ -58,9 +59,21 @@ interface TraceRow {
   id: string;
   traceId: string;
   rootSpanName: string;
+  rootSpanKind: string;
   startTime: string;
   endTime: string;
   durationInSeconds: number;
+  spanCount: number;
+  status: {
+    errorCount: number;
+  };
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  input?: string;
+  output?: string;
 }
 
 function TracesTableSkeleton() {
@@ -98,6 +111,7 @@ interface TracesTableProps {
   envId: string;
   timeRange: TraceListTimeRange;
   setTimeRange?: (timeRange: TraceListTimeRange) => void;
+  onTraceClick?: (traceId: string) => void;
 }
 
 export function TracesTable({
@@ -107,8 +121,11 @@ export function TracesTable({
   envId,
   timeRange,
   setTimeRange,
+  onTraceClick,
 }: TracesTableProps) {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  
   const {
     data: traceData,
     isLoading,
@@ -145,13 +162,37 @@ export function TracesTable({
           id: trace.traceId,
           traceId: trace.traceId,
           rootSpanName: trace.rootSpanName,
+          rootSpanKind: trace.rootSpanKind || "unknown",
           startTime: trace.startTime,
           endTime: trace.endTime,
           durationInSeconds: durationInSeconds,
+          spanCount: trace.spanCount || 0,
+          status: trace.status || { errorCount: 0 },
+          tokenUsage: trace.tokenUsage,
+          input: trace.input,
+          output: trace.output,
         } as TraceRow;
       }) ?? [],
     [traceListResponse?.traces]
   );
+
+  // Filter rows based on search query
+  const filteredRows = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return rows;
+    }
+    
+    const query = searchQuery.toLowerCase();
+    return rows.filter((row) => {
+      return (
+        row.traceId.toLowerCase().includes(query) ||
+        row.rootSpanName.toLowerCase().includes(query) ||
+        row.rootSpanKind.toLowerCase().includes(query) ||
+        row.input?.toLowerCase().includes(query) ||
+        row.output?.toLowerCase().includes(query)
+      );
+    });
+  }, [rows, searchQuery]);
 
   const getDurationColor = useCallback((durationInSeconds: number) => {
     if (durationInSeconds < 2) return "success";
@@ -164,38 +205,95 @@ export function TracesTable({
       {
         id: "rootSpanName",
         label: "Name",
-        width: "20%",
+        width: "15%",
         render: (value, row) => (
-          <ButtonBase
-            component={Link}
-            to={generateTraceDetailPath(row.traceId as string)}
-          >
-            <Typography noWrap variant="body2">
-              {value}
+          <Box>
+            <ButtonBase
+              component={Link}
+              to={generateTraceDetailPath(row.traceId as string)}
+            >
+              <Typography noWrap variant="body2">
+                {value as string}
+              </Typography>
+            </ButtonBase>
+            <Typography noWrap variant="caption" color="text.secondary">
+              {row.rootSpanKind}
             </Typography>
-          </ButtonBase>
+          </Box>
         ),
       },
       {
-        id: "traceId",
-        label: "Trace ID",
-        width: "25%",
-        render: (value) => (
-          <ButtonBase
-            component={Link}
-            to={generateTraceDetailPath(value as string)}
-          >
-            <Typography noWrap variant="body2" color="text.secondary">
-              {(value as string).substring(0, 8)}.....
-              {(value as string).substring((value as string).length - 8)}
-            </Typography>
-          </ButtonBase>
-        ),
+        id: "status",
+        label: "Status",
+        width: "8%",
+        render: (value) => {
+          const status = value as TraceRow["status"];
+          return (
+            <Chip
+              label={status.errorCount > 0 ? "Error" : "Success"}
+              size="small"
+              color={status.errorCount > 0 ? "error" : "success"}
+              variant="outlined"
+            />
+          );
+        },
+      },
+      {
+        id: "input",
+        label: "Input",
+        width: "12%",
+        render: (value) => {
+          if (!value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                -
+              </Typography>
+            );
+          }
+          const inputStr = value as string;
+          const truncated =
+            inputStr.length > 30
+              ? `${inputStr.substring(0, 30)}...`
+              : inputStr;
+          return (
+            <Tooltip title={inputStr}>
+              <Typography noWrap variant="body2">
+                {truncated}
+              </Typography>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "output",
+        label: "Output",
+        width: "12%",
+        render: (value) => {
+          if (!value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                -
+              </Typography>
+            );
+          }
+          const outputStr = value as string;
+          const truncated =
+            outputStr.length > 30
+              ? `${outputStr.substring(0, 30)}...`
+              : outputStr;
+          return (
+            <Tooltip title={outputStr}>
+              <Typography noWrap variant="body2">
+                {truncated}
+              </Typography>
+            </Tooltip>
+          );
+        },
       },
       {
         id: "startTime",
         label: "Start Time",
-        width: "20%",
+        width: "12%",
         render: (value) => (
           <Typography noWrap variant="body2">
             {dayjs(value as string).format("DD/MM/YYYY HH:mm:ss")}
@@ -203,9 +301,9 @@ export function TracesTable({
         ),
       },
       {
-        id: "durationInNanos",
+        id: "durationInSeconds",
         label: "Duration",
-        width: "15%",
+        width: "10%",
         render: (value) => (
           <Chip
             label={`${(value as number).toFixed(2)}s`}
@@ -216,20 +314,43 @@ export function TracesTable({
         ),
       },
       {
-        id: "actions",
-        label: "",
-        width: "10%",
-        align: "center",
-        render: (_value, row) => (
-          <Button
-            variant="text"
-            size="small"
-            component={Link}
-            startIcon={<RemoveRedEyeOutlined size={16} />}
-            to={generateTraceDetailPath(row.traceId as string)}
-          >
-            Expand
-          </Button>
+        id: "tokenUsage",
+        label: "Tokens",
+        width: "8%",
+        render: (value) => {
+          if (!value) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                -
+              </Typography>
+            );
+          }
+          const tokens = value as TraceRow["tokenUsage"];
+          return (
+            <Tooltip
+              title={
+                <Box>
+                  <Typography variant="caption">
+                    Input: {tokens?.inputTokens || 0}
+                  </Typography>
+                  <br />
+                  <Typography variant="caption">
+                    Output: {tokens?.outputTokens || 0}
+                  </Typography>
+                </Box>
+              }
+            >
+              <Typography variant="body2">{tokens?.totalTokens || 0}</Typography>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: "spanCount",
+        label: "Spans",
+        width: "13%",
+        render: (value) => (
+          <Typography variant="body2">{value as number}</Typography>
         ),
       },
     ],
@@ -253,67 +374,102 @@ export function TracesTable({
 
   return (
     <FadeIn>
-      <Box display="flex" flexDirection="column" gap={4}>
-        <Box display="flex" justifyContent="flex-end" gap={1} width="100%">
-          {setTimeRange && (
-            <Select
-              size="small"
-              variant="outlined"
-              value={timeRange}
-              startAdornment={
-                <InputAdornment position="start">
-                  <AccessTimeOutlined size={16} />
-                </InputAdornment>
-              }
-              onChange={(e) =>
-                setTimeRange(e.target.value as TraceListTimeRange)
-              }
-            >
-              {TIME_RANGE_OPTIONS.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          )}
-          <IconButton
-            disabled={isRefetching}
-            color="primary"
-            onClick={() => {
-              refetch();
-            }}
-          >
-            {isRefetching ? (
-              <CircularProgress size={18} color="inherit" />
-            ) : (
-              <RefreshCcw size={18} />
-            )}
-          </IconButton>
-        </Box>
+      <Box display="flex" flexDirection="column" gap={3}>
+        {/* Overview Cards */}
         <TracesTopCards timeRange={timeRange} />
+        
+        {/* Filters Row: Time Range + Search + Refresh */}
+        <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+          <Box display="flex" gap={2} alignItems="center" flex={1}>
+            {/* Search Field */}
+            <TextField
+              size="small"
+              placeholder="Search traces..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ flex: 1 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search size={18} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            {searchQuery && (
+              <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                {filteredRows.length} of {rows.length} traces
+              </Typography>
+            )}
+          </Box>
+          
+          {/* Time Range and Refresh */}
+          <Box display="flex" gap={1}>
+            {setTimeRange && (
+              <Select
+                size="small"
+                variant="outlined"
+                value={timeRange}
+                startAdornment={
+                  <InputAdornment position="start">
+                    <AccessTimeOutlined size={16} />
+                  </InputAdornment>
+                }
+                onChange={(e) =>
+                  setTimeRange(e.target.value as TraceListTimeRange)
+                }
+              >
+                {TIME_RANGE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            )}
+            <IconButton
+              disabled={isRefetching}
+              color="primary"
+              onClick={() => {
+                refetch();
+              }}
+            >
+              {isRefetching ? (
+                <CircularProgress size={18} color="inherit" />
+              ) : (
+                <RefreshCcw size={18} />
+              )}
+            </IconButton>
+          </Box>
+        </Box>
+
+        {/* Traces Table */}
         {isLoading && <TracesTableSkeleton />}
-        {rows.length > 0 && (
+        {filteredRows.length > 0 && (
           <Box sx={{ backgroundColor: "background.paper", borderRadius: 1 }}>
             <DataListingTable
-              data={rows}
+              data={filteredRows}
               columns={columns}
               onRowClick={(row) => {
-                navigate(generateTraceDetailPath(row.traceId as string));
+                if (onTraceClick) {
+                  onTraceClick(row.traceId as string);
+                } else {
+                  navigate(generateTraceDetailPath(row.traceId as string));
+                }
               }}
               pagination
               pageSize={10}
-              maxRows={rows.length}
+              maxRows={filteredRows.length}
               initialState={tableInitialState}
               emptyStateTitle="No traces found"
               emptyStateDescription="No traces found for the selected time range"
             />
           </Box>
         )}
-        {rows.length === 0 && !isLoading && (
+        {filteredRows.length === 0 && !isLoading && (
           <NoDataFound
-            message="No traces found!"
+            message={searchQuery ? "No matching traces found!" : "No traces found!"}
             icon={<Workflow size={32} />}
-            subtitle="Try changing the time range"
+            subtitle={searchQuery ? "Try a different search term" : "Try changing the time range"}
           />
         )}
       </Box>

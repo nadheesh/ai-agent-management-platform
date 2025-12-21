@@ -17,80 +17,94 @@
  */
 
 import React, { useState } from "react";
-import { Box } from "@wso2/oxygen-ui";
+import { Box, Drawer } from "@wso2/oxygen-ui";
 import { TracesTable } from "@agent-management-platform/shared-component";
-import { FadeIn, PageLayout } from "@agent-management-platform/views";
-import { generatePath, Route, Routes, useParams } from "react-router-dom";
+import { FadeIn, PageLayout, DrawerHeader } from "@agent-management-platform/views";
 import { TraceDetails } from "./subComponents/TraceDetails";
 import {
-  absoluteRouteMap,
-  relativeRouteMap,
   TraceListTimeRange,
 } from "@agent-management-platform/types";
+import { useParams } from "react-router-dom";
+import { GitBranch } from "@wso2/oxygen-ui-icons-react";
 
 export const AgentTraces: React.FC = () => {
   const { agentId, orgId, projectId, envId } = useParams();
   const [timeRange, setTimeRange] = useState<TraceListTimeRange>(
     TraceListTimeRange.ONE_DAY
   );
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+
+  const handleTraceClick = (traceId: string) => {
+    setSelectedTraceId(traceId);
+  };
+
+  const handleCloseDrawer = () => {
+    setSelectedTraceId(null);
+  };
 
   return (
     <FadeIn>
-      <Box
-        sx={{
-          display: "flex",
-          pb: 2,
-          flexDirection: "column",
-        }}
-      >
-        <Routes>
-          <Route
-            path={
-              relativeRouteMap.children.org.children.projects.children.agents
-                .children.environment.children.observability.children.traces
-                .path + "/*"
-            }
+      <PageLayout title="Traces" disableIcon>
+        <Box
+          sx={{
+            display: "flex",
+            pb: 2,
+            flexDirection: "column",
+          }}
+        >
+          <TracesTable
+            orgId={orgId ?? "default"}
+            projectId={projectId ?? "default"}
+            agentId={agentId ?? "default"}
+            envId={envId ?? "default"}
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+            onTraceClick={handleTraceClick}
+          />
+
+          {/* Trace Details Drawer */}
+          <Drawer
+            anchor="right"
+            open={!!selectedTraceId}
+            onClose={handleCloseDrawer}
+            sx={{
+              zIndex: (theme) => theme.zIndex.drawer,
+            }}
+            slotProps={{
+              backdrop: {
+                sx: {
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  top: '64px', // Position below AppBar
+                },
+              },
+            }}
+            PaperProps={{
+              sx: {
+                width: "90%",
+                maxWidth: "1600px",
+                height: "calc(100vh - 64px)", // Account for AppBar height
+                marginTop: "64px", // Start below AppBar
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "#ffffff",
+              },
+            }}
           >
-            <Route
-              index
-              element={
-                <PageLayout title="Traces" disableIcon>
-                  <TracesTable
-                    orgId={orgId ?? "default"}
-                    projectId={projectId ?? "default"}
-                    agentId={agentId ?? "default"}
-                    envId={envId ?? "default"}
-                    timeRange={timeRange}
-                    setTimeRange={setTimeRange}
-                  />
-                </PageLayout>
-              }
-            />
-            <Route
-              path={
-                relativeRouteMap.children.org.children.projects.children.agents
-                  .children.environment.children.observability.children.traces
-                  .children.traceDetails.path
-              }
-              element={
-                <PageLayout
+            {selectedTraceId && (
+              <>
+                <DrawerHeader
+                  icon={<GitBranch size={24} />}
                   title="Trace Details"
-                  backLabel="Back to Traces"
-                  disableIcon
-                  backHref={generatePath(
-                    absoluteRouteMap.children.org.children.projects.children
-                      .agents.children.environment.children.observability
-                      .children.traces.path,
-                    { orgId, projectId, agentId, envId }
-                  )}
-                >
-                  <TraceDetails />
-                </PageLayout>
-              }
-            />
-          </Route>
-        </Routes>
-      </Box>
+                  onClose={handleCloseDrawer}
+                />
+                <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                  <TraceDetails traceId={selectedTraceId} />
+                </Box>
+              </>
+            )}
+          </Drawer>
+        </Box>
+      </PageLayout>
     </FadeIn>
   );
 };

@@ -20,15 +20,68 @@ export interface Trace {
   traceId: string;
   rootSpanId: string;
   rootSpanName: string;
+  rootSpanKind?: string;
   startTime: string;
   endTime: string;
   durationInNanos: number;
   spanCount: number;
+  status?: {
+    errorCount: number;
+  };
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  input?: string;
+  output?: string;
 }
 
 export interface TraceListResponse {
   traces: Trace[];
   totalCount: number;
+}
+
+export interface PromptMessage {
+  role: string; // system, user, assistant, tool
+  content?: string;
+  toolCalls?: ToolCall[];
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters?: string;
+}
+
+export interface SpanStatus {
+  error: boolean;
+  errorType?: string;
+}
+
+export interface LLMTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens?: number;
+  totalTokens: number;
+}
+
+export interface AmpAttributes {
+  kind: string; // llm, tool, embedding, retriever, rerank, agent, task, unknown
+  input?: PromptMessage[] | string;
+  output?: PromptMessage[] | string;
+  tools?: ToolDefinition[];
+  name?: string;
+  status?: SpanStatus;
+  model?: string;
+  temperature?: number;
+  tokenUsage?: LLMTokenUsage;
 }
 
 export interface Span {
@@ -44,6 +97,7 @@ export interface Span {
   status?: string;
   attributes?: Record<string, unknown>;
   resource?: Record<string, unknown>;
+  ampAttributes?: AmpAttributes;
 }
 
 export interface TraceDetailsResponse {

@@ -19,7 +19,6 @@
 import { Span } from '@agent-management-platform/types';
 import {
   Box,
-  Button,
   ButtonBase,
   Chip,
   Collapse,
@@ -37,15 +36,19 @@ import {
   Languages,
   DollarSign,
   HandCoins,
-  List,
-  Funnel,
   XCircle,
+  Wrench,
+  Sparkles,
+  Workflow,
+  Bot,
+  Database,
 } from '@wso2/oxygen-ui-icons-react';
 import { TraceEntityPreview } from './TraceEntityPreview';
 
 interface TraceExplorerProps {
   spans: Span[];
-  onOpenAtributesClick: (span: Span) => void;
+  onSpanClick: (span: Span) => void;
+  selectedSpanId?: string;
 }
 
 interface RenderSpan {
@@ -109,8 +112,31 @@ const populateRenderSpans = (
   return { renderSpanMap, rootSpans };
 };
 
+// Helper function to get span type icon
+const getSpanTypeIcon = (span: Span) => {
+  const ampKind = span.ampAttributes?.kind;
+  
+  switch (ampKind) {
+    case 'llm':
+      return <Brain size={20} />;
+    case 'tool':
+      return <Wrench size={20} />;
+    case 'embedding':
+      return <Sparkles size={20} />;
+    case 'agent':
+      return <Bot size={20} />;
+    case 'chain':
+    case 'task':
+      return <Workflow size={20} />;
+    case 'retriever':
+      return <Database size={20} />;
+    default:
+      return null; // No icon for unknown types
+  }
+};
+
 export function TraceExplorer(props: TraceExplorerProps) {
-  const { spans, onOpenAtributesClick } = props;
+  const { spans, onSpanClick, selectedSpanId } = props;
   const theme = useTheme();
 
   const renderSpan = useCallback(
@@ -171,7 +197,7 @@ export function TraceExplorer(props: TraceExplorerProps) {
           )}
 
           <ButtonBase
-            onClick={() => onOpenAtributesClick(span.span)}
+            onClick={() => onSpanClick(span.span)}
             sx={{
               width: '100%',
               mb: 0.5,
@@ -179,23 +205,33 @@ export function TraceExplorer(props: TraceExplorerProps) {
               textAlign: 'left',
               flexGrow: 1,
               display: 'flex',
-              border: `0px solid ${theme.palette.secondary.main}`,
-              borderLeft: `2px solid ${theme.palette.primary.main}`,
+              px: 2,
+              py: 1.5,
+              borderRadius: 1,
+              border: selectedSpanId === span.span.spanId
+                ? `2px solid ${theme.palette.primary.main}`
+                : `1px solid ${theme.palette.divider}`,
               transition: 'all 0.2s ease-in-out',
-              backgroundColor: 'background.paper',
+              backgroundColor: selectedSpanId === span.span.spanId
+                ? 'primary.50'
+                : '#fafafa',
               '&:hover': {
-                backgroundColor: 'background.default',
+                backgroundColor: selectedSpanId === span.span.spanId
+                  ? 'primary.50'
+                  : 'action.hover',
+                borderColor: selectedSpanId === span.span.spanId
+                  ? theme.palette.primary.main
+                  : theme.palette.primary.light,
               },
             }}
           >
             <Box
               display="flex"
-              pl={1}
-              justifyContent="center"
               alignItems="center"
               height="100%"
               flexDirection="row"
-              gap={1}
+              gap={1.5}
+              flex={1}
             >
               <IconButton
                 disabled={!hasChildren}
@@ -204,66 +240,95 @@ export function TraceExplorer(props: TraceExplorerProps) {
                   e.preventDefault();
                   toggleExpanded(key);
                 }}
-                color="primary"
+                size="small"
                 sx={{
-                  height: 'fit-content',
-                  width: 'fit-content',
+                  color: hasChildren ? 'primary.main' : 'action.disabled',
                 }}
               >
                 {hasChildren ? (
-                  <>
-                    <Box
-                      component="span"
-                      sx={{
-                        transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                        display: 'inline-flex',
-                        transition: 'transform 0.2s ease-in-out',
-                      }}
-                    >
-                      <ChevronDown size={16} />
-                    </Box>
-                  </>
+                  <Box
+                    component="span"
+                    sx={{
+                      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      display: 'inline-flex',
+                      transition: 'transform 0.2s ease-in-out',
+                    }}
+                  >
+                    <ChevronDown size={18} />
+                  </Box>
                 ) : (
-                  <Minus size={16} />
+                  <Minus size={18} />
                 )}
               </IconButton>
+              
+              {/* Span Type Icon - Larger and more prominent */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: 1,
+                  backgroundColor: 'primary.50',
+                  color: 'primary.main',
+                  flexShrink: 0,
+                }}
+              >
+                {getSpanTypeIcon(span.span)}
+              </Box>
+              
               <Box
                 display="flex"
                 flexDirection="column"
-                justifyContent="start"
-                py={1}
+                justifyContent="center"
+                gap={0.5}
+                flex={1}
+                minWidth={0}
               >
                 <Box
                   display="flex"
                   flexDirection="row"
-                  justifyContent="start"
                   alignItems="center"
                   gap={1}
+                  flexWrap="wrap"
                 >
-                  <Typography variant="h6">
-                    {span.span.name} &nbsp;
+                  <Typography 
+                    variant="body1" 
+                    sx={{ 
+                      fontWeight: 500,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {span.span.name}
+                  </Typography>
+                  
+                  <Chip
+                    icon={<Clock size={14} />}
+                    label={formatDuration(span.span.durationInNanos)}
+                    size="small"
+                    variant="outlined"
+                    sx={{ height: 20 }}
+                  />
+                  
+                  {span.span.status === '2' && (
                     <Chip
-                      icon={<Clock size={16} />}
-                      label={formatDuration(span.span.durationInNanos)}
+                      icon={<XCircle size={14} />}
+                      color="error"
+                      label="Error"
                       size="small"
-                      variant="outlined"
+                      variant="filled"
+                      sx={{ height: 20 }}
                     />
-                    &nbsp;
-                    {span.span.status === '2' && (
-                      <Chip
-                        icon={<XCircle size={16} />}
-                        color="error"
-                        label="Error"
-                        size="small"
-                        variant="outlined"
-                      />
-                    )}
-                  </Typography>
-                  <Typography variant="caption">
-                    id: {span.span.spanId}
-                  </Typography>
+                  )}
                 </Box>
-                <Box display="flex" flexDirection="row" gap={1}>
+                
+                <Box display="flex" flexDirection="row" gap={0.5} alignItems="center" flexWrap="wrap">
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                    {span.span.spanId}
+                  </Typography>
                   <TraceEntityPreview span={span.span} />
                 </Box>
               </Box>
@@ -305,18 +370,6 @@ export function TraceExplorer(props: TraceExplorerProps) {
                     />
                   </Tooltip>
                 )}
-                {!!span.span?.attributes?.['traceloop.span.kind'] && (
-                  <Tooltip title={'Span Kind'}>
-                    <Chip
-                      label={
-                        span.span?.attributes?.['traceloop.span.kind'] as string
-                      }
-                      icon={<Funnel size={16} />}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Tooltip>
-                )}
                 {!!span.span?.attributes?.['gen_ai.usage.completion_tokens'] && (
                   <Tooltip title={'Completion Tokens'}>
                     <Chip
@@ -348,19 +401,6 @@ export function TraceExplorer(props: TraceExplorerProps) {
                   </Tooltip>
                 )}
               </Box>
-              <Button
-                onClick={(e) => {
-                  onOpenAtributesClick(span.span);
-                  e.stopPropagation();
-                  e.preventDefault();
-                }}
-                startIcon={<List size={16} />}
-                variant="text"
-                size="small"
-                color="primary"
-              >
-                Span Details
-              </Button>
             </Box>
           </ButtonBase>
           {hasChildren && (
@@ -389,14 +429,15 @@ export function TraceExplorer(props: TraceExplorerProps) {
         </Box>
       );
     },
-    [onOpenAtributesClick, theme]
+    [onSpanClick, selectedSpanId, theme]
   );
 
   const [expandedSpans, setExpandedSpans] = useState<Record<string, boolean>>(
     () => {
+      // Expand all spans by default
       return spans.reduce(
         (acc, span) => {
-          acc[span.spanId] = !span.parentSpanId;
+          acc[span.spanId] = true;
           return acc;
         },
         {} as Record<string, boolean>

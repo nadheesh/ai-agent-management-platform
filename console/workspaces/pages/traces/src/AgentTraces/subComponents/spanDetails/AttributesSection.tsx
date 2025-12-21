@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Box, Card, CardContent, Typography, alpha, useTheme } from "@wso2/oxygen-ui";
+import { Box, Card, CardContent, Typography, useTheme } from "@wso2/oxygen-ui";
 import { useCallback } from "react";
 
 interface AttributesSectionProps {
@@ -76,14 +76,13 @@ export function AttributesSection({ attributes }: AttributesSectionProps) {
     return (
         <Box>
             <Typography 
-                variant="subtitle2" 
-                fontWeight="bold" 
+                variant="subtitle1" 
                 sx={{ 
-                    color: theme.palette.text.secondary, 
-                    mb: 1.5 
+                    fontWeight: 600, 
+                    mb: 2 
                 }}
             >
-                Attributes
+                Span Attributes
             </Typography>
             <Box 
                 sx={{ 
@@ -110,9 +109,10 @@ export function AttributesSection({ attributes }: AttributesSectionProps) {
                             sx={{
                                 maxHeight: isJsonObject(value) ? 375 : 'auto',
                                 overflow: 'auto',
-                                bgcolor: theme.palette.mode === 'dark' 
-                                    ? alpha(theme.palette.common.black, 0.2)
-                                    : alpha(theme.palette.common.black, 0.03),
+                                bgcolor: '#ffffff !important',
+                                border: 1,
+                                borderColor: 'divider',
+                                borderRadius: 2,
                             }}
                         >
                             <CardContent sx={{ '&:last-child': { pb: 1.5 } }}>

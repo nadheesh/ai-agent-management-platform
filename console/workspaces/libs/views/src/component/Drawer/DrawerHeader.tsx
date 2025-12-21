@@ -33,8 +33,13 @@ export function DrawerHeader({ icon, title, onClose }: DrawerHeaderProps) {
       flexDirection="row"
       justifyContent="space-between"
       alignItems="center"
-      mb={1}
-      pt={2}
+      mb={0}
+      p={2}
+      sx={{
+        backgroundColor: "#ffffff",
+        borderBottom: 1,
+        borderColor: "divider",
+      }}
     >
       <Box display="flex" flexDirection="row" alignItems="center" gap={1}>
         {icon}

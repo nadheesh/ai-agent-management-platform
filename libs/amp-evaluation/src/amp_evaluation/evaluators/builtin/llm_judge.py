@@ -102,7 +102,6 @@ class HelpfulnessEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         prompt = f"""You are an expert evaluator. Your sole criterion is HELPFULNESS: does the response actually help the user with what they asked for?
@@ -139,7 +138,6 @@ class ClarityEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         return f"""You are an expert evaluator. Your sole criterion is CLARITY: is the response clear, well-structured, and easy to understand?
@@ -171,7 +169,6 @@ class AccuracyEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "correctness"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         return f"""You are an expert evaluator. Your sole criterion is ACCURACY: is the factual information in the response correct and reliable?
@@ -205,7 +202,6 @@ class CompletenessEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         prompt = f"""You are an expert evaluator. Your sole criterion is COMPLETENESS: does the response address every part of the user's query without leaving gaps?
@@ -245,7 +241,6 @@ class FaithfulnessEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "correctness"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     on_missing_context: str = Param(
         default="skip",
         enum=["skip", "zero"],
@@ -331,7 +326,6 @@ class ContextRelevanceEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "relevance"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     on_missing_context: str = Param(
         default="skip",
         enum=["skip", "zero"],
@@ -401,7 +395,6 @@ class InstructionFollowingEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "compliance"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     on_missing_context: str = Param(
         default="skip",
         enum=["skip", "zero"],
@@ -489,7 +482,6 @@ class RelevanceEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "relevance"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         return f"""You are an expert evaluator. Your sole criterion is RELEVANCE: does the response address the same topic and intent as the user's query?
@@ -526,7 +518,6 @@ class SemanticSimilarityEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "correctness"]
 
-    threshold: float = Param(default=0.7, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     on_missing_context: str = Param(
         default="skip",
         enum=["skip", "zero"],
@@ -584,7 +575,6 @@ class HallucinationEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "correctness", "safety"]
 
-    threshold: float = Param(default=0.7, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
         evidence_section = ""
@@ -643,7 +633,6 @@ class CoherenceEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, llm_span: LLMSpan, task: Optional[Task] = None) -> str:
         user_input = "\n".join(m.content for m in llm_span.user_messages if m.content)
@@ -678,7 +667,6 @@ class ConcisenessEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality", "efficiency"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, llm_span: LLMSpan, task: Optional[Task] = None) -> str:
         user_input = "\n".join(m.content for m in llm_span.user_messages if m.content)
@@ -719,7 +707,6 @@ class SafetyEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "safety"]
 
-    threshold: float = Param(default=0.7, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     context: str = Param(
         default="",
         description=(
@@ -770,7 +757,6 @@ class ToneEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "quality"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     context: str = Param(
         default="",
         description=(
@@ -821,7 +807,6 @@ class GoalClarityEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "reasoning"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, agent_trace: AgentTrace, task: Optional[Task] = None) -> str:
         # Get the first LLM step to inspect initial understanding
@@ -873,7 +858,6 @@ class ReasoningQualityEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "reasoning"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, agent_trace: AgentTrace, task: Optional[Task] = None) -> str:
         steps_summary = _format_agent_steps(agent_trace)
@@ -919,7 +903,6 @@ class PathEfficiencyEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "efficiency"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
 
     def build_prompt(self, agent_trace: AgentTrace, task: Optional[Task] = None) -> str:
         steps_summary = _format_agent_steps(agent_trace)
@@ -967,7 +950,6 @@ class ErrorRecoveryEvaluator(LLMAsJudgeEvaluator):
     )
     tags = ["builtin", "llm-judge", "reasoning"]
 
-    threshold: float = Param(default=0.5, min=0.0, max=1.0, description="Pass threshold (0.0-1.0)")
     on_missing_context: str = Param(
         default="skip",
         enum=["skip", "zero"],

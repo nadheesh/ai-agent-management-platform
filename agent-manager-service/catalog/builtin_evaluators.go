@@ -148,7 +148,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -166,7 +165,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -184,7 +182,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -202,7 +199,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -220,7 +216,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -239,7 +234,6 @@ var entries = []*Entry{
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "on_missing_context", Type: "string", Description: "Behavior when no retrieval spans are found: 'skip' returns EvalResult.skip(), 'zero' returns score=0.0", Required: false, Default: "skip", EnumValues: []string{"skip", "zero"}},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -258,7 +252,6 @@ var entries = []*Entry{
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "on_missing_context", Type: "string", Description: "Behavior when no errors are found in the agent trace: 'skip' returns EvalResult.skip(), 'zero' returns score=0.0", Required: false, Default: "skip", EnumValues: []string{"skip", "zero"}},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -277,7 +270,6 @@ var entries = []*Entry{
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "on_missing_context", Type: "string", Description: "Behavior when no tool or retrieval spans are found: 'skip' returns EvalResult.skip(), 'zero' returns score=0.0", Required: false, Default: "skip", EnumValues: []string{"skip", "zero"}},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -295,7 +287,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -313,7 +304,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.7), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -331,7 +321,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -350,7 +339,6 @@ var entries = []*Entry{
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "on_missing_context", Type: "string", Description: "Behavior when no system prompt or task instructions are found: 'skip' returns EvalResult.skip(), 'zero' returns score=0.0", Required: false, Default: "skip", EnumValues: []string{"skip", "zero"}},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -368,7 +356,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -386,7 +373,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -404,7 +390,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -423,7 +408,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.7), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 	{
@@ -442,7 +426,6 @@ var entries = []*Entry{
 			{Key: "max_tokens", Type: "integer", Description: "Max tokens for LLM response", Required: false, Default: float64(1024)},
 			{Key: "model", Type: "string", Description: "LLM model in provider/model format (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-6)", Required: false, Default: "openai/gpt-4o-mini"},
 			{Key: "temperature", Type: "float", Description: "LLM temperature", Required: false, Default: float64(0.0)},
-			{Key: "threshold", Type: "float", Description: "Pass threshold (0.0-1.0)", Required: false, Default: float64(0.5), Min: floatPtr(0.0), Max: floatPtr(1.0)},
 		},
 	},
 }

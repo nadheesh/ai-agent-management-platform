@@ -31,7 +31,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from main import parse_args, validate_time_format, publish_scores
+from main import parse_args, validate_time_format, publish_scores, OAuth2TokenManager
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ class TestEvaluatorRegistration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             patch("main.TraceFetcher"),
             patch("main.Monitor", return_value=mock_monitor_instance),
             pytest.raises(SystemExit) as exc_info,
@@ -374,7 +374,7 @@ class TestEvaluatorRegistration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             patch("main.TraceFetcher"),
             patch("main.Monitor", return_value=mock_monitor_instance),
             pytest.raises(SystemExit),
@@ -401,7 +401,13 @@ class TestPublishScores:
     MONITOR_ID = "550e8400-e29b-41d4-a716-446655440000"
     RUN_ID = "660e8400-e29b-41d4-a716-446655440000"
     API_ENDPOINT = "http://agent-manager:8081"
-    API_KEY = "test-key"
+
+    @staticmethod
+    def _make_token_manager():
+        """Create a mock OAuth2TokenManager that returns a fixed token."""
+        tm = MagicMock(spec=OAuth2TokenManager)
+        tm.get_token.return_value = "mock-access-token"
+        return tm
 
     @patch("main.requests.post")
     def test_payload_structure_matches_go_schema(self, mock_post):
@@ -424,13 +430,14 @@ class TestPublishScores:
 
         display_name_to_identifier = {"Latency Check": "latency_performance"}
 
+        token_manager = self._make_token_manager()
         result = publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             display_name_to_identifier,
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
         assert result is True
 
@@ -442,7 +449,7 @@ class TestPublishScores:
 
         # Verify headers
         headers = mock_post.call_args[1]["headers"]
-        assert headers["x-api-key"] == self.API_KEY
+        assert headers["Authorization"] == "Bearer mock-access-token"
         assert headers["Content-Type"] == "application/json"
 
         # Verify payload structure
@@ -514,13 +521,14 @@ class TestPublishScores:
             "Span Latency": "latency_performance",
         }
 
+        token_manager = self._make_token_manager()
         result = publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             display_name_to_identifier,
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
         assert result is True
 
@@ -563,13 +571,14 @@ class TestPublishScores:
 
         display_name_to_identifier = {"Answer Relevancy": "answer_relevancy"}
 
+        token_manager = self._make_token_manager()
         publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             display_name_to_identifier,
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
 
         payload = mock_post.call_args[1]["json"]
@@ -599,13 +608,14 @@ class TestPublishScores:
             ),
         }
 
+        token_manager = self._make_token_manager()
         publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             {"Latency Check": "latency"},
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
 
         payload = mock_post.call_args[1]["json"]
@@ -616,13 +626,14 @@ class TestPublishScores:
 
     def test_empty_scores_returns_true(self):
         """No scores to publish should return True without making HTTP call."""
+        token_manager = self._make_token_manager()
         result = publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             {},
             {},
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
         assert result is True
 
@@ -646,13 +657,14 @@ class TestPublishScores:
             ),
         }
 
+        token_manager = self._make_token_manager()
         result = publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             {"Latency Check": "latency"},
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
         assert result is False
 
@@ -671,13 +683,14 @@ class TestPublishScores:
             ),
         }
 
+        token_manager = self._make_token_manager()
         publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             {"Latency Check": "latency"},
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
 
         payload = mock_post.call_args[1]["json"]
@@ -702,13 +715,14 @@ class TestPublishScores:
         }
 
         # Empty mapping - no identifier found
+        token_manager = self._make_token_manager()
         publish_scores(
             self.MONITOR_ID,
             self.RUN_ID,
             scores,
             {},
             self.API_ENDPOINT,
-            self.API_KEY,
+            token_manager,
         )
 
         payload = mock_post.call_args[1]["json"]
@@ -773,7 +787,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             patch("main.TraceFetcher"),
             patch("main.Monitor", return_value=mock_monitor_instance),
             pytest.raises(SystemExit) as exc_info,
@@ -795,8 +809,8 @@ class TestMainIntegration:
         # publish_scores was called
         mock_publish.assert_called_once()
 
-    def test_missing_publisher_api_key_exits(self):
-        """Should exit with code 1 when PUBLISHER_API_KEY is not set."""
+    def test_missing_idp_credentials_exits(self):
+        """Should exit with code 1 when IDP credentials are not set."""
         from main import main
 
         evaluators = [
@@ -825,7 +839,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
@@ -840,7 +854,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
@@ -884,7 +898,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
@@ -900,7 +914,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
@@ -916,7 +930,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             pytest.raises(SystemExit) as exc_info,
         ):
             main()
@@ -952,7 +966,7 @@ class TestMainIntegration:
 
         with (
             patch.object(sys, "argv", argv),
-            patch.dict("os.environ", {"PUBLISHER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"IDP_TOKEN_URL": "http://thunder:8090/oauth2/token", "IDP_CLIENT_ID": "test-client", "IDP_CLIENT_SECRET": "test-secret"}),
             patch("main.TraceFetcher"),
             patch("main.Monitor", return_value=mock_monitor),
             pytest.raises(SystemExit) as exc_info,

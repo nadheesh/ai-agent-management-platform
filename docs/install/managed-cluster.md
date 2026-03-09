@@ -405,8 +405,6 @@ helm install amp \
 
 **Note:** If you're using port-forwarding or exposing the gateway differently, update the `console.config.instrumentationUrl` accordingly.
 
-**Note:** If you change `agentManagerService.config.publisherApiKey.value`, make sure to set the same value for `ampEvaluation.publisher.apiKey` in the Evaluation Extension chart (Step 8). Both must match for evaluation score publishing to work.
-
 **Wait for components to be ready:**
 
 ```bash
@@ -560,14 +558,16 @@ helm install amp-evaluation-extension \
   --timeout 1800s
 ```
 
-**Note:** The default `publisher.apiKey` must match the `publisherApiKey.value` configured in the Agent Manager chart (Step 4). Both default to `amp-internal-api-key`. If you changed the Agent Manager's `publisherApiKey.value`, override it here:
+**Note:** The Evaluation Extension uses OAuth2 client credentials (via the AMP Publisher Client created by Thunder) to authenticate when publishing scores to the Agent Manager. The default credentials match the Thunder bootstrap configuration. If you customized the Thunder bootstrap `ampPublisherClient` settings, override them here:
 
 ```bash
 helm install amp-evaluation-extension \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
   --version 0.0.0-dev \
   --namespace ${BUILD_CI_NS} \
-  --set ampEvaluation.publisher.apiKey="your-custom-key" \
+  --set ampEvaluation.publisher.idpTokenUrl="http://thunder.amp-thunder.svc.cluster.local:8090/oauth2/token" \
+  --set ampEvaluation.publisher.clientId="amp-publisher-client" \
+  --set ampEvaluation.publisher.clientSecret="amp-publisher-client-secret" \
   --timeout 1800s
 ```
 

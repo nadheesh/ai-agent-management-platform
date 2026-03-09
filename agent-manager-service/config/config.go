@@ -232,7 +232,6 @@ type InternalServerConfig struct {
 	Host    string // Server host (default: "")
 	Port    int    // Server port (default: 9243)
 	CertDir string // Directory for TLS certificates (default: "./data/certs")
-	APIKey  string `json:"-"` // API key for internal service-to-service auth
 	// HTTP Server timeout configurations
 	ReadTimeoutSeconds  int
 	WriteTimeoutSeconds int

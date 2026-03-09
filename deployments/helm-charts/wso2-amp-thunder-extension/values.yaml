@@ -117,12 +117,26 @@ thunder:
         - 50-amp-api-client.sh
         - 51-user-schema-and-users.sh
         - 52-amp-console-app.sh
+        - 53-amp-publisher-client.sh
     # AMP API Client configuration
     ampApiClient:
       clientId: "amp-api-client"
       clientSecret: "amp-api-client-secret"
       name: "AMP API Client"
       description: "Client application for AMP API access"
+      authFlowGraphId: "auth_flow_config_basic"
+      grantTypes:
+        - "client_credentials"
+      tokenEndpointAuthMethod: "client_secret_post"
+      pkceRequired: false
+      publicClient: false
+      accessTokenValidityPeriod: 3600
+    # AMP Publisher Client configuration (for evaluation job to publish scores)
+    ampPublisherClient:
+      clientId: "amp-publisher-client"
+      clientSecret: "amp-publisher-client-secret"
+      name: "AMP Publisher Client"
+      description: "Client application for evaluation job to publish scores"
       authFlowGraphId: "auth_flow_config_basic"
       grantTypes:
         - "client_credentials"

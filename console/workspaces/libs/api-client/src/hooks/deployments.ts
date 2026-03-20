@@ -16,14 +16,15 @@
  * under the License.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  deployAgent, 
-  listAgentDeployments, 
-  getAgentEndpoints, 
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  deployAgent,
+  listAgentDeployments,
+  getAgentEndpoints,
   getAgentConfigurations,
   listEnvironments,
   getDeploymentPipeline,
+  updateDeploymentState,
 } from '../apis';
 import { useAuthHooks } from '@agent-management-platform/auth';
 import {
@@ -42,14 +43,19 @@ import {
   GetDeploymentPipelinePathParams,
   DeploymentPipelineResponse,
   DeploymentDetailsResponse,
+  UpdateDeploymentStatePathParams,
+  UpdateDeploymentStateRequest,
+  UpdateDeploymentStateResponse,
 } from '@agent-management-platform/types';
 import { POLL_INTERVAL } from '../utils';
+import { useApiMutation, useApiQuery } from './react-query-notifications';
 
 export function useDeployAgent() {
   const queryClient = useQueryClient();
   const { getToken } = useAuthHooks();
-  return useMutation<DeploymentResponse, unknown, 
+  return useApiMutation<DeploymentResponse, unknown, 
   { params: DeployAgentPathParams; body: DeployAgentRequest }>({
+    action: { verb: 'deploy', target: 'agent' },
     mutationFn: ({ params, body }) => deployAgent(params, body, getToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-configurations'] });
@@ -64,7 +70,7 @@ export function useListAgentDeployments(
 ) {
   const { getToken } = useAuthHooks();
   
-  return useQuery<DeploymentListResponse>({
+  return useApiQuery<DeploymentListResponse>({
     queryKey: ['agent-deployments', params.orgName, params.projName, params.agentName],
     queryFn: () => listAgentDeployments(params, getToken),
     enabled: options?.enabled ?? (!!params.orgName && !!params.projName && !!params.agentName),
@@ -83,7 +89,7 @@ export function useListAgentDeployments(
 
 export function useGetAgentEndpoints(params: GetAgentEndpointsPathParams, query: EnvironmentQuery) {
   const { getToken } = useAuthHooks();
-  return useQuery<EndpointsResponse>({
+  return useApiQuery<EndpointsResponse>({
     queryKey: ['agent-endpoints', params, query],
     queryFn: () => getAgentEndpoints(params, query, getToken),
     enabled: !!params.orgName && !!params.projName && !!params.agentName && !!query.environment,
@@ -93,7 +99,7 @@ export function useGetAgentEndpoints(params: GetAgentEndpointsPathParams, query:
 export function useGetAgentConfigurations
 (params: GetAgentConfigurationsPathParams, query: EnvironmentQuery) {
   const { getToken } = useAuthHooks();
-  return useQuery<ConfigurationResponse>({
+  return useApiQuery<ConfigurationResponse>({
     queryKey: ['agent-configurations', params, query],
     queryFn: () => getAgentConfigurations(params, query, getToken),
     enabled: !!params.orgName && !!params.projName && !!params.agentName && !!query.environment,
@@ -102,7 +108,7 @@ export function useGetAgentConfigurations
 
 export function useListEnvironments(params: ListEnvironmentsPathParams) {
   const { getToken } = useAuthHooks();
-  return useQuery<EnvironmentListResponse>({
+  return useApiQuery<EnvironmentListResponse>({
     queryKey: ['environments', params],
     queryFn: () => listEnvironments(params, getToken),
     enabled: !!params.orgName,
@@ -111,10 +117,23 @@ export function useListEnvironments(params: ListEnvironmentsPathParams) {
 
 export function useGetDeploymentPipeline(params: GetDeploymentPipelinePathParams) {
   const { getToken } = useAuthHooks();
-  return useQuery<DeploymentPipelineResponse>({
+  return useApiQuery<DeploymentPipelineResponse>({
     queryKey: ['deployment-pipeline', params],
     queryFn: () => getDeploymentPipeline(params, getToken),
     enabled: !!params.orgName && !!params.projName,
+  });
+}
+
+export function useUpdateDeploymentState() {
+  const queryClient = useQueryClient();
+  const { getToken } = useAuthHooks();
+  return useApiMutation<UpdateDeploymentStateResponse, unknown,
+  { params: UpdateDeploymentStatePathParams; body: UpdateDeploymentStateRequest }>({
+    action: { verb: 'update', target: 'deployment state' },
+    mutationFn: ({ params, body }) => updateDeploymentState(params, body, getToken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-deployments'] });
+    },
   });
 }
 

@@ -662,7 +662,7 @@ paths:
             type: string
         - name: environment
           in: query
-          description: Optional environment name. If omitted, returns component-level defaults. If provided, returns environment-specific overrides (if any) along with component defaults and isDefaultsOverridden flag.
+          description: Optional environment name. If omitted, returns component-level defaults. If provided, returns environment-specific resource configurations.
           required: false
           schema:
             type: string
@@ -1063,6 +1063,63 @@ paths:
                 $ref: "#/components/schemas/DeploymentListResponse"
         "404":
           description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orgs/{orgName}/projects/{projName}/agents/{agentName}/deployments/state:
+    post:
+      summary: Request agent deployment state transition
+      description: |
+        Requests a deployment state transition for an agent in a specific environment.
+      operationId: updateAgentDeploymentState
+      parameters:
+        - name: agentName
+          in: path
+          description: Unique name of the agent
+          required: true
+          schema:
+            type: string
+        - name: orgName
+          in: path
+          description: Organization name
+          required: true
+          schema:
+            type: string
+        - name: projName
+          in: path
+          description: Project name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDeploymentStateRequest"
+      responses:
+        "200":
+          description: Deployment state transition request accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateDeploymentStateResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Agent or environment not found
           content:
             application/json:
               schema:
@@ -5621,7 +5678,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Comma-separated list of evaluator display names (e.g. "faithfulness,relevance,coherence"). Returns time-series data for all specified evaluators grouped in a single response.
+          description: Comma-separated list of evaluator display names (e.g. "groundedness,relevance,coherence"). Returns time-series data for all specified evaluators grouped in a single response.
       responses:
         "200":
           description: Batch time-series data grouped by evaluator
@@ -5892,6 +5949,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EvaluatorLLMProviderListResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orgs/{orgName}/evaluators/custom:
+    post:
+      summary: Create a custom evaluator
+      description: Creates a new custom evaluator (code or llm_judge type) for the organization
+      operationId: createCustomEvaluator
+      tags:
+        - Evaluators
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organization name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomEvaluatorRequest"
+      responses:
+        "201":
+          description: Custom evaluator created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluatorResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Evaluator with this identifier already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orgs/{orgName}/evaluators/custom/{identifier}:
+    get:
+      summary: Get a custom evaluator
+      description: Retrieves a custom evaluator by its identifier
+      operationId: getCustomEvaluator
+      tags:
+        - Evaluators
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organization name
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            minLength: 1
+            maxLength: 128
+          description: Custom evaluator identifier
+      responses:
+        "200":
+          description: Custom evaluator details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluatorResponse"
+        "404":
+          description: Evaluator not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Update a custom evaluator
+      description: Updates an existing custom evaluator
+      operationId: updateCustomEvaluator
+      tags:
+        - Evaluators
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organization name
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            minLength: 1
+            maxLength: 128
+          description: Custom evaluator identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomEvaluatorRequest"
+      responses:
+        "200":
+          description: Custom evaluator updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluatorResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Evaluator not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete a custom evaluator
+      description: Soft-deletes a custom evaluator
+      operationId: deleteCustomEvaluator
+      tags:
+        - Evaluators
+      parameters:
+        - name: orgName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Organization name
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            minLength: 1
+            maxLength: 128
+          description: Custom evaluator identifier
+      responses:
+        "204":
+          description: Custom evaluator deleted
+        "404":
+          description: Evaluator not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Custom evaluator is referenced by one or more active monitors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Internal server error
           content:
@@ -6177,15 +6419,18 @@ components:
       required:
         - replicas
         - resources
+        - autoScaling
       properties:
         replicas:
           type: integer
           format: int32
-          description: Number of replicas to run
+          description: Number of replicas to run (only used when autoscaling is disabled)
           minimum: 0
           maximum: 10
         resources:
           $ref: "#/components/schemas/ResourceConfig"
+        autoScaling:
+          $ref: "#/components/schemas/AutoScalingConfig"
 
     ResourceConfig:
       type: object
@@ -6219,26 +6464,55 @@ components:
           description: Memory limit (e.g., "512Mi", "2Gi", "1Ti", "256Ki")
           pattern: '^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)$'
 
+    AutoScalingConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether autoscaling is enabled
+        minReplicas:
+          type: integer
+          format: int32
+          description: Minimum number of replicas
+          minimum: 1
+        maxReplicas:
+          type: integer
+          format: int32
+          description: Maximum number of replicas
+          minimum: 1
+
+    CORSConfig:
+      type: object
+      properties:
+        allowOrigin:
+          type: array
+          items:
+            type: string
+          description: Allowed origins for CORS
+        allowMethods:
+          type: array
+          items:
+            type: string
+          description: Allowed HTTP methods for CORS
+        allowHeaders:
+          type: array
+          items:
+            type: string
+          description: Allowed headers for CORS
+
     AgentResourceConfigsResponse:
       type: object
       properties:
         replicas:
           type: integer
           format: int32
-          description: Current number of replicas (environment-specific if environment provided, otherwise component default)
+          description: Current number of replicas
         resources:
           $ref: "#/components/schemas/ResourceConfig"
-          description: Current resource configurations (environment-specific if environment provided, otherwise component default)
-        defaultReplicas:
-          type: integer
-          format: int32
-          description: Component-level default replicas (only populated when environment query parameter is provided)
-        defaultResources:
-          $ref: "#/components/schemas/ResourceConfig"
-          description: Component-level default resources (only populated when environment query parameter is provided)
-        isDefaultsOverridden:
-          type: boolean
-          description: Indicates whether environment-specific overrides exist (only populated when environment query parameter is provided)
+          description: Current resource configurations
+        autoScaling:
+          $ref: "#/components/schemas/AutoScalingConfig"
+          description: Current autoscaling configuration
 
     UpdateProjectRequest:
       type: object
@@ -6551,6 +6825,46 @@ components:
           default: true
       required:
         - imageId
+
+    UpdateDeploymentStateRequest:
+      type: object
+      description: Request to update the deployment state of an agent
+      properties:
+        environment:
+          type: string
+          description: Target environment name
+        state:
+          type: string
+          description: Desired deployment state
+          enum:
+            - Active
+            - Undeploy
+      required:
+        - environment
+        - state
+
+    UpdateDeploymentStateResponse:
+      type: object
+      description: |
+        Response indicating the deployment state transition request was accepted.
+      properties:
+        message:
+          type: string
+          description: Confirmation message indicating the state transition request was accepted
+        environment:
+          type: string
+          description: Environment where the state transition was requested
+        state:
+          type: string
+          description: Desired deployment state that was requested (not necessarily the current state)
+          enum:
+            - Active
+            - Undeploy
+      required:
+        - message
+        - environment
+        - state
+
     Configurations:
       type: object
       properties:
@@ -6567,7 +6881,6 @@ components:
       type: object
       required:
         - key
-        - value
       properties:
         key:
           type: string
@@ -6579,6 +6892,9 @@ components:
           type: boolean
           default: false
           description: If true, value is stored in KV and synced via ExternalSecret
+        secretRef:
+          type: string
+          description: Reference to existing secret.
     InputInterface:
       type: object
       description: Endpoint configurations
@@ -6912,11 +7228,14 @@ components:
           description: Configuration key
         value:
           type: string
-          description: Configuration value
+          description: Configuration value (empty for sensitive values)
         isSensitive:
           type: boolean
           description: Whether this configuration value is sensitive (e.g., a secret)
           default: false
+        secretRef:
+          type: string
+          description: Reference to the secret storing this value. Only present for sensitive configurations.
       required:
         - key
         - value
@@ -7491,6 +7810,85 @@ components:
           items:
             $ref: "#/components/schemas/EvaluatorConfigParam"
           description: Configuration schema for the evaluator
+        type:
+          type: string
+          description: Custom evaluator type (empty for built-in)
+          enum:
+            - ""
+            - code
+            - llm_judge
+          example: "code"
+        source:
+          type: string
+          description: Source code (code type) or prompt template (llm_judge type)
+
+    CreateCustomEvaluatorRequest:
+      type: object
+      required:
+        - displayName
+        - type
+        - level
+        - source
+      properties:
+        identifier:
+          type: string
+          description: Optional identifier slug (auto-generated from displayName if omitted)
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          minLength: 1
+          maxLength: 128
+        displayName:
+          type: string
+          description: Human-readable display name
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          description: Description of the evaluator
+        type:
+          type: string
+          enum:
+            - code
+            - llm_judge
+          description: Evaluator type
+        level:
+          type: string
+          enum:
+            - trace
+            - agent
+            - llm
+          description: Evaluation granularity level
+        source:
+          type: string
+          description: Python source code or prompt template
+        configSchema:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorConfigParam"
+        tags:
+          type: array
+          items:
+            type: string
+
+    UpdateCustomEvaluatorRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          description: Human-readable display name
+        description:
+          type: string
+          description: Description of the evaluator
+        source:
+          type: string
+          description: Python source code or prompt template
+        configSchema:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorConfigParam"
+        tags:
+          type: array
+          items:
+            type: string
 
     EvaluatorConfigParam:
       type: object
@@ -7652,15 +8050,19 @@ components:
       properties:
         message:
           type: string
-          description: Human-readable error message
-        description:
+          description: User-friendly error message for display in UI
+        reason:
           type: string
-          description: Error description
+          description: Sanitized technical reason for debugging (must not include secrets, credentials, stack traces, or PII)
+        code:
+          type: string
+          description: Machine-readable error code for programmatic handling
         additionalData:
           type: object
           additionalProperties: true
       required:
         - message
+        - code
 
     AgentTypeSubtype:
       type: object
@@ -9206,7 +9608,7 @@ components:
             - true: Add to catalog (makes it discoverable for agent configurations)
             - false: Remove from catalog (hides from catalog queries)
           example: true
-  
+
     LLMProviderListItem:
       required:
         - uuid
@@ -9266,7 +9668,7 @@ components:
         - upstream
         - status
       properties:
-        uuid: 
+        uuid:
           type: string
           description: UUID of the llm provider
         id:
@@ -9611,7 +10013,7 @@ components:
           type: string
           description: Authentication type
           enum:
-            - apiKey
+            - api-key
             - bearer
             - basic
             - none
@@ -10436,6 +10838,17 @@ components:
                 policies:
                   - name: "cache"
                     enabled: true
+        environmentVariables:
+          type: array
+          description: Optional custom environment variable names. If omitted, names are auto-generated from the config name. Duplicate keys are rejected with 400.
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/EnvironmentVariableConfig"
+          example:
+            - key: "url"
+              name: "MY_CUSTOM_LLM_URL"
+            - key: "apikey"
+              name: "MY_CUSTOM_API_KEY"
 
     EnvModelConfigRequest:
       type: object
@@ -10478,6 +10891,19 @@ components:
           example:
             development:
               providerUuid: "550e8400-e29b-41d4-a716-446655440000"
+        environmentVariables:
+          type: array
+          description: >
+            Optional updated environment variable names. Partial updates are supported: entries are merged by key, so
+            only the keys included in the payload will be renamed and omitted keys retain their existing names.
+            Changes apply globally across all environments. If omitted entirely, all existing names are left unchanged.
+          items:
+            $ref: "#/components/schemas/EnvironmentVariableConfig"
+          example:
+            - key: "url"
+              name: "NEW_LLM_URL"
+            - key: "apikey"
+              name: "NEW_API_KEY"
 
     AgentModelConfigResponse:
       type: object
@@ -10488,7 +10914,7 @@ components:
         - type
         - organizationName
         - projectName
-        - envModelConfig
+        - envMappings
         - environmentVariables
         - createdAt
         - updatedAt
@@ -10530,10 +10956,10 @@ components:
           example:
             development:
               environmentName: "development"
-              llmProxy:
+              configuration:
+                providerName: "openai-gpt4"
                 proxyUuid: "880e8400-e29b-41d4-a716-446655440000"
-                proxyName: "openai-gpt4"
-                context: "/v1/chat/completions"
+                url: "https://proxy.example.com/v1/chat/completions"
                 status: "active"
         environmentVariables:
           type: array
@@ -10541,8 +10967,10 @@ components:
           items:
             $ref: "#/components/schemas/EnvironmentVariableConfig"
           example:
-            - name: "OPENAI_API_KEY"
-            - name: "MODEL_ENDPOINT"
+            - key: "apikey"
+              name: "OPENAI_API_KEY"
+            - key: "url"
+              name: "MODEL_ENDPOINT"
         createdAt:
           type: string
           format: date-time
@@ -10595,7 +11023,7 @@ components:
           type: string
           description: Status of the proxy
           example: "active"
-    
+
     AuthInfo:
       type: object
       required:
@@ -10603,18 +11031,18 @@ components:
         - in
         - name
       properties:
-        type: 
+        type:
           type: string
           description: authentication type, api-key, oauth2
         in:
           type: string
           description: how the token should be set (header, query param)
           example: header
-        name: 
+        name:
           type: string
           description: expected header or query paremeter name
           example: api-key
-        value: 
+        value:
           type: string
           description: api key or token value
 
@@ -10652,11 +11080,14 @@ components:
       properties:
         key:
           type: string
+          minLength: 1
           description: Environment variable key
           example: "apikey"
         name:
           type: string
-          description: Environment variable name
+          minLength: 1
+          pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+          description: Environment variable name. Must start with a letter or underscore and contain only letters, digits, and underscores.
           example: "OPENAI_API_KEY"
 
     AgentModelConfigListResponse:
@@ -10883,6 +11314,10 @@ components:
           type: string
           description: Virtual host
           example: "api.example.com"
+        policies:
+          type: array
+          items: 
+            type: string
         modelProviders:
           type: array
           description: List of model providers and their models

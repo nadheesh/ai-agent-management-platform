@@ -37,7 +37,8 @@ type SecretLocation struct {
 	ProjectName     string // optional — empty for org-level secrets
 	AgentName       string // optional — for agent-scoped secrets
 	EnvironmentName string // optional — empty for org-level secrets
-	ComponentName   string // e.g., provider-handle or proxy-handle
+	EntityName      string // e.g., provider-handle or proxy-handle
+	ConfigName      string // optional — e.g., "config-name"
 	SecretKey       string // optional — e.g., "api-key"
 }
 
@@ -57,13 +58,15 @@ func sanitizeSegment(s string) (string, error) {
 // or if any segment contains invalid characters (e.g., '/').
 // Examples:
 //
-//	org/provider-handle/api-key               (org-level provider)
-//	org/project/agent/env/provider-handle/api-key  (agent-scoped)
+//	org/env/provider-handle/api-key               (org-level provider)
+//	org/project/env/agent/config-name/provider-handle/api-key  (agent-scoped)
+//
+// org/project/env/agent/config-name/proxy-handle/api-key  (agent-scoped)
 func (l SecretLocation) KVPath() (string, error) {
 	if strings.TrimSpace(l.OrgName) == "" {
 		return "", fmt.Errorf("SecretLocation.OrgName is required")
 	}
-	if strings.TrimSpace(l.ComponentName) == "" {
+	if strings.TrimSpace(l.EntityName) == "" {
 		return "", fmt.Errorf("SecretLocation.ComponentName is required")
 	}
 
@@ -82,15 +85,6 @@ func (l SecretLocation) KVPath() (string, error) {
 			parts = append(parts, seg)
 		}
 	}
-	if l.AgentName != "" {
-		seg, err := sanitizeSegment(l.AgentName)
-		if err != nil {
-			return "", fmt.Errorf("invalid AgentName: %w", err)
-		}
-		if seg != "" {
-			parts = append(parts, seg)
-		}
-	}
 	if l.EnvironmentName != "" {
 		seg, err := sanitizeSegment(l.EnvironmentName)
 		if err != nil {
@@ -100,11 +94,33 @@ func (l SecretLocation) KVPath() (string, error) {
 			parts = append(parts, seg)
 		}
 	}
-	compSeg, err := sanitizeSegment(l.ComponentName)
-	if err != nil {
-		return "", fmt.Errorf("invalid ComponentName: %w", err)
+	if l.AgentName != "" {
+		seg, err := sanitizeSegment(l.AgentName)
+		if err != nil {
+			return "", fmt.Errorf("invalid AgentName: %w", err)
+		}
+		if seg != "" {
+			parts = append(parts, seg)
+		}
 	}
-	parts = append(parts, compSeg)
+	if l.ConfigName != "" {
+		seg, err := sanitizeSegment(l.ConfigName)
+		if err != nil {
+			return "", fmt.Errorf("invalid Config name: %w", err)
+		}
+		if seg != "" {
+			parts = append(parts, seg)
+		}
+	}
+	if l.EntityName != "" {
+		seg, err := sanitizeSegment(l.EntityName)
+		if err != nil {
+			return "", fmt.Errorf("invalid Entity name: %w", err)
+		}
+		if seg != "" {
+			parts = append(parts, seg)
+		}
+	}
 
 	if l.SecretKey != "" {
 		seg, err := sanitizeSegment(l.SecretKey)
@@ -122,11 +138,9 @@ func (l SecretLocation) KVPath() (string, error) {
 //
 //go:generate moq -out ../clientmocks/secret_mgmt_client_fake.go -pkg clientmocks . SecretManagementClient
 type SecretManagementClient interface {
-	// CreateSecret creates a new secret at the location derived from SecretLocation.
+	// CreateSecret creates or updates a secret at the location derived from SecretLocation.
+	// This REPLACES all secret data at the location.
 	CreateSecret(ctx context.Context, location SecretLocation, data map[string]string) (string, error)
-
-	// UpdateSecret updates an existing secret at the location derived from SecretLocation.
-	UpdateSecret(ctx context.Context, location SecretLocation, data map[string]string) (string, error)
 
 	// DeleteSecret deletes a secret at the location derived from SecretLocation.
 	DeleteSecret(ctx context.Context, location SecretLocation) error
@@ -184,37 +198,12 @@ func (c *secretManagementClient) CreateSecret(ctx context.Context, location Secr
 		return "", fmt.Errorf("failed to marshal secret data: %w", err)
 	}
 
-	// Push the secret
+	// Push the secret (handles both create and update)
 	metadata := &SecretMetadata{
 		ManagedBy: c.managedBy,
 	}
 	if err := c.lowLevelClient.PushSecret(ctx, kvPath, data, metadata); err != nil {
-		return "", fmt.Errorf("failed to create secret: %w", err)
-	}
-
-	return kvPath, nil
-}
-
-// UpdateSecret updates an existing secret at the location derived from SecretLocation.
-// Returns the KV path where the secret was stored.
-func (c *secretManagementClient) UpdateSecret(ctx context.Context, location SecretLocation, secretData map[string]string) (string, error) {
-	kvPath, err := location.KVPath()
-	if err != nil {
-		return "", fmt.Errorf("invalid secret location: %w", err)
-	}
-
-	// Convert map to JSON bytes
-	data, err := json.Marshal(secretData)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal secret data: %w", err)
-	}
-
-	// Push the secret (PushSecret handles both create and update)
-	metadata := &SecretMetadata{
-		ManagedBy: c.managedBy,
-	}
-	if err := c.lowLevelClient.PushSecret(ctx, kvPath, data, metadata); err != nil {
-		return "", fmt.Errorf("failed to update secret: %w", err)
+		return "", fmt.Errorf("failed to upsert secret: %w", err)
 	}
 
 	return kvPath, nil

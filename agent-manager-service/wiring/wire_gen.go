@@ -90,12 +90,13 @@ func InitializeAppParams(cfg *config.Config, db *gorm.DB, authProvider client.Au
 	gatewayInternalAPIService := services.NewGatewayInternalAPIService(llmProviderRepository, llmProxyRepository, deploymentRepository, gatewayRepository, infraResourceManager, secretManagementClient)
 	gatewayInternalController := controllers.NewGatewayInternalController(platformGatewayService, gatewayInternalAPIService)
 	monitorRepository := ProvideMonitorRepository(db)
+	customEvaluatorRepository := ProvideCustomEvaluatorRepository(db)
 	v, err := ProvideEncryptionKey(configConfig)
 	if err != nil {
 		return nil, err
 	}
-	monitorExecutor := services.NewMonitorExecutor(openChoreoClient, logger, monitorRepository, v)
-	evaluatorManagerService := services.NewEvaluatorManagerService(logger)
+	monitorExecutor := services.NewMonitorExecutor(openChoreoClient, logger, monitorRepository, customEvaluatorRepository, v)
+	evaluatorManagerService := services.NewEvaluatorManagerService(logger, customEvaluatorRepository, monitorRepository)
 	scoreRepository := ProvideScoreRepository(db)
 	monitorManagerService := services.NewMonitorManagerService(logger, openChoreoClient, observabilitySvcClient, monitorExecutor, evaluatorManagerService, monitorRepository, scoreRepository, v)
 	monitorController := controllers.NewMonitorController(monitorManagerService)
@@ -196,12 +197,13 @@ func InitializeTestAppParamsWithClientMocks(cfg *config.Config, db *gorm.DB, aut
 	gatewayInternalAPIService := services.NewGatewayInternalAPIService(llmProviderRepository, llmProxyRepository, deploymentRepository, gatewayRepository, infraResourceManager, secretManagementClient)
 	gatewayInternalController := controllers.NewGatewayInternalController(platformGatewayService, gatewayInternalAPIService)
 	monitorRepository := ProvideMonitorRepository(db)
+	customEvaluatorRepository := ProvideCustomEvaluatorRepository(db)
 	v, err := ProvideEncryptionKey(configConfig)
 	if err != nil {
 		return nil, err
 	}
-	monitorExecutor := services.NewMonitorExecutor(openChoreoClient, logger, monitorRepository, v)
-	evaluatorManagerService := services.NewEvaluatorManagerService(logger)
+	monitorExecutor := services.NewMonitorExecutor(openChoreoClient, logger, monitorRepository, customEvaluatorRepository, v)
+	evaluatorManagerService := services.NewEvaluatorManagerService(logger, customEvaluatorRepository, monitorRepository)
 	scoreRepository := ProvideScoreRepository(db)
 	monitorManagerService := services.NewMonitorManagerService(logger, openChoreoClient, observabilitySvcClient, monitorExecutor, evaluatorManagerService, monitorRepository, scoreRepository, v)
 	monitorController := controllers.NewMonitorController(monitorManagerService)
@@ -303,9 +305,8 @@ func ProvideSecretManagementClient(cfg config.Config) (secretmanagersvc.SecretMa
 	return secretmanagersvc.NewSecretManagementClient(&secretmanagersvc.StoreConfig{
 		Provider: cfg.SecretManager.Provider,
 		OpenBao: &secretmanagersvc.OpenBaoConfig{
-			Server:  cfg.OpenBao.URL,
-			Path:    cfg.OpenBao.Path,
-			Version: cfg.OpenBao.Version,
+			Server: cfg.OpenBao.URL,
+			Path:   cfg.OpenBao.Path,
 			Auth: &secretmanagersvc.OpenBaoAuth{
 				Token: cfg.OpenBao.Token,
 			},
@@ -327,7 +328,8 @@ var repositoryProviderSet = wire.NewSet(
 	ProvideScoreRepository,
 	ProvideCatalogRepository,
 	ProvideMonitorRepository,
-	ProvideAgentConfigRepository, repositories.NewAgentConfigurationRepository, repositories.NewEnvAgentModelMappingRepository, repositories.NewAgentEnvConfigVariableRepository,
+	ProvideAgentConfigRepository,
+	ProvideCustomEvaluatorRepository, repositories.NewAgentConfigurationRepository, repositories.NewEnvAgentModelMappingRepository, repositories.NewAgentEnvConfigVariableRepository,
 )
 
 var websocketProviderSet = wire.NewSet(
@@ -409,4 +411,8 @@ func ProvideMonitorRepository(db *gorm.DB) repositories.MonitorRepository {
 
 func ProvideAgentConfigRepository(db *gorm.DB) repositories.AgentConfigRepository {
 	return repositories.NewAgentConfigRepo(db)
+}
+
+func ProvideCustomEvaluatorRepository(db *gorm.DB) repositories.CustomEvaluatorRepository {
+	return repositories.NewCustomEvaluatorRepo(db)
 }

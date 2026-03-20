@@ -60,6 +60,7 @@ type EnvVars struct {
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	IsSensitive bool   `json:"isSensitive,omitempty"`
+	SecretRef   string `json:"secretRef,omitempty"`
 }
 
 // Build represents a build instance
@@ -97,10 +98,11 @@ type BuildStep struct {
 
 // InputInterface represents endpoint configuration
 type InputInterface struct {
-	Type     string                `json:"type"`
-	Port     int32                 `json:"port,omitempty"`
-	BasePath string                `json:"basePath,omitempty"`
-	Schema   *InputInterfaceSchema `json:"schema,omitempty"`
+	Type       string                `json:"type"`
+	Port       int32                 `json:"port,omitempty"`
+	BasePath   string                `json:"basePath"`
+	Visibility []string              `json:"visibility"`
+	Schema     *InputInterfaceSchema `json:"schema,omitempty"`
 }
 
 // InputInterfaceSchema represents schema configuration

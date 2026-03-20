@@ -24,10 +24,11 @@ The parser accepts Trace objects from the fetcher (OTEL/AMP attribute model)
 and converts them to Trace (evaluation-optimized model).
 """
 
+import json
+from collections import defaultdict
 from dataclasses import replace as dataclass_replace
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
 import logging
-import uuid
 
 from .models import (
     Trace,
@@ -37,6 +38,7 @@ from .models import (
     ToolSpan,
     RetrieverSpan,
     AgentSpan,
+    ChainSpan,
     LLMMetrics,
     ToolMetrics,
     RetrieverMetrics,
@@ -48,7 +50,7 @@ from .models import (
     ToolCall,
     RetrievedDoc,
 )
-from .fetcher import OTELTrace, OTELSpan, AmpAttributes, _parse_timestamp
+from .fetcher import OTELTrace, OTELSpan, _parse_timestamp
 
 
 logger = logging.getLogger(__name__)
@@ -66,17 +68,22 @@ INFRASTRUCTURE_KINDS = {"chain", "unknown", "task", "crewaitask"}
 SEMANTIC_KINDS = {"llm", "tool", "agent", "retriever", "embedding"}
 
 
-def filter_infrastructure_spans(spans: List[OTELSpan], create_synthetic_root: bool = True) -> List[OTELSpan]:
+def filter_infrastructure_spans(spans: List[OTELSpan]) -> List[OTELSpan]:
     """
     Filter infrastructure spans while preserving trace tree structure.
 
-    Removes spans with kind: chain, unknown, task, crewaitask
-    Keeps semantic spans: llm, tool, agent, retriever, embedding
-    Remaps parent references to maintain valid tree.
+    Removes pass-through infrastructure spans (chain, unknown, task, crewaitask)
+    but keeps **bridge** infrastructure spans that are needed to maintain the
+    tree hierarchy:
+      - Root spans (no parent) are always kept.
+      - Infrastructure spans with 2+ child branches that each lead to at
+        least one semantic descendant are kept as structural bridges.
+
+    Pass-through infrastructure spans (single child path) are removed and their
+    children are remapped to the nearest kept ancestor.
 
     Args:
         spans: List of OTEL spans to filter
-        create_synthetic_root: If True, creates synthetic root when >1 orphaned semantic span
 
     Returns:
         Filtered list of OTEL spans with remapped parent references
@@ -85,129 +92,79 @@ def filter_infrastructure_spans(spans: List[OTELSpan], create_synthetic_root: bo
         return spans
 
     # Phase 1: Build indices
-    spans_by_id = {s.spanId: s for s in spans}
+    spans_by_id: Dict[str, OTELSpan] = {s.spanId: s for s in spans}
+    children_map: Dict[str, List[str]] = defaultdict(list)
+    for s in spans:
+        if s.parentSpanId:
+            children_map[s.parentSpanId].append(s.spanId)
 
-    # Phase 2: Calculate remappings
-    remap_map = {}
+    # Phase 2: Compute which subtrees contain semantic spans (memoized)
+    _semantic_cache: Dict[str, bool] = {}
+
+    def has_semantic_descendant(span_id: str) -> bool:
+        if span_id in _semantic_cache:
+            return _semantic_cache[span_id]
+        span = spans_by_id.get(span_id)
+        if not span:
+            _semantic_cache[span_id] = False
+            return False
+        if span.ampAttributes.kind in SEMANTIC_KINDS:
+            _semantic_cache[span_id] = True
+            return True
+        result = any(has_semantic_descendant(cid) for cid in children_map.get(span_id, []))
+        _semantic_cache[span_id] = result
+        return result
+
+    # Phase 3: Identify bridge infrastructure spans
+    bridge_ids: Set[str] = set()
     for span in spans:
-        kind = span.ampAttributes.kind
-        if kind in INFRASTRUCTURE_KINDS:
-            ancestor = _find_semantic_ancestor(span.spanId, spans_by_id)
-            remap_map[span.spanId] = ancestor
+        if span.ampAttributes.kind not in INFRASTRUCTURE_KINDS:
+            continue
+        # Root is always a bridge (if it has semantic descendants)
+        if span.parentSpanId is None:
+            if has_semantic_descendant(span.spanId):
+                bridge_ids.add(span.spanId)
+            continue
+        # Branching rule: 2+ child branches with semantic descendants
+        semantic_branches = sum(1 for cid in children_map.get(span.spanId, []) if has_semantic_descendant(cid))
+        if semantic_branches >= 2:
+            bridge_ids.add(span.spanId)
 
-    # Phase 3: Detect orphans
-    semantic_spans = [s for s in spans if s.ampAttributes.kind in SEMANTIC_KINDS]
-    orphans = []
+    # Phase 4: Build keep set (semantic + bridge spans)
+    keep_ids: Set[str] = {s.spanId for s in spans if s.ampAttributes.kind in SEMANTIC_KINDS} | bridge_ids
 
-    for span in semantic_spans:
+    # Phase 5: Remap parents of kept spans whose parent was removed
+    def _find_kept_ancestor(span_id: str) -> Optional[str]:
+        """Walk up from span (exclusive) to find nearest kept ancestor."""
+        visited: Set[str] = set()
+        current = spans_by_id.get(span_id)
+        if not current:
+            return None
+        current_id = current.parentSpanId
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            if current_id in keep_ids:
+                return current_id
+            parent = spans_by_id.get(current_id)
+            if not parent:
+                return None
+            current_id = parent.parentSpanId
+        return None
+
+    filtered_spans: List[OTELSpan] = []
+    for span in spans:
+        if span.spanId not in keep_ids:
+            continue
         parent_id = span.parentSpanId
-        if parent_id:
-            # Walk up to find semantic parent
-            final_parent = remap_map.get(parent_id, parent_id)
-            if final_parent is None:
-                orphans.append(span)
-        elif parent_id is None:
-            # Root span - check if it's infrastructure
-            kind = span.ampAttributes.kind
-            if kind in INFRASTRUCTURE_KINDS:
-                orphans.append(span)
-
-    # Phase 4: Create synthetic root if needed
-    synthetic_root = None
-    if create_synthetic_root and len(orphans) > 1:
-        # Find min start time
-        start_times = [s.startTime for s in orphans if s.startTime]
-        min_start = min(start_times) if start_times else ""
-
-        # Find max end time (use start+1ms if no endTime)
-        end_times = [s.endTime if hasattr(s, "endTime") and s.endTime else s.startTime for s in orphans if s.startTime]
-        max_end = max(end_times) if end_times else min_start
-
-        # Create synthetic root span using OTELSpan dataclass
-        synthetic_root_id = f"_synthetic_root_{uuid.uuid4().hex[:8]}"
-
-        # Get trace ID from first orphan
-        trace_id = orphans[0].traceId if orphans else "unknown"
-
-        synthetic_root = OTELSpan(  # type: ignore[call-arg]
-            traceId=trace_id,
-            spanId=synthetic_root_id,
-            name="trace_root",
-            service="synthetic",
-            startTime=min_start,
-            endTime=max_end,
-            durationInNanos=0,
-            kind="INTERNAL",
-            status="OK",
-            parentSpanId=None,
-            ampAttributes=AmpAttributes(kind="unknown", synthetic=True),
-            attributes={},
-        )
-
-    # Phase 5: Filter & Remap
-    filtered_spans = []
-    if synthetic_root:
-        filtered_spans.append(synthetic_root)
-
-    for span in spans:
-        kind = span.ampAttributes.kind
-        if kind in SEMANTIC_KINDS:
-            # Remap parent
-            old_parent = span.parentSpanId
-            new_parent = remap_map.get(old_parent or "", old_parent)
-
-            if new_parent is None and len(orphans) > 1:
-                # Orphan, connect to synthetic root
-                new_parent = synthetic_root.spanId if synthetic_root else None
-
-            # Create a copy of the span with the remapped parent to avoid mutating the original
-            filtered_spans.append(dataclass_replace(span, parentSpanId=new_parent))
+        if parent_id and parent_id not in keep_ids:
+            # Parent was removed — remap to nearest kept ancestor
+            parent_id = _find_kept_ancestor(span.spanId)
+        filtered_spans.append(dataclass_replace(span, parentSpanId=parent_id))
 
     # Phase 6: Validate
     _validate_trace_structure(filtered_spans)
 
     return filtered_spans
-
-
-def _find_semantic_ancestor(span_id: str, spans_by_id: Dict[str, OTELSpan]) -> Optional[str]:
-    """
-    Walk up parent chain to find first semantic ancestor.
-
-    Args:
-        span_id: Starting span ID
-        spans_by_id: Lookup dict of span ID to OTELSpan
-
-    Returns:
-        Span ID of first semantic ancestor, or None if no semantic ancestor found
-    """
-    visited = set()
-    current_id = span_id
-
-    while current_id in spans_by_id:
-        if current_id in visited:
-            logger.warning(f"Cycle detected in span hierarchy at {current_id}")
-            return None  # Cycle detected
-        visited.add(current_id)
-
-        current_span = spans_by_id[current_id]
-        parent_id = current_span.parentSpanId
-
-        if parent_id is None:
-            return None  # Reached root
-
-        if parent_id not in spans_by_id:
-            logger.warning(f"Parent span {parent_id} not found for span {current_id}")
-            return None
-
-        parent_span = spans_by_id[parent_id]
-        parent_kind = parent_span.ampAttributes.kind
-
-        if parent_kind in SEMANTIC_KINDS:
-            return parent_id  # Found semantic ancestor
-
-        current_id = parent_id  # Continue walking
-
-    return None
 
 
 def _validate_trace_structure(spans: List[OTELSpan]) -> None:
@@ -320,8 +277,17 @@ def parse_trace_for_evaluation(trace: OTELTrace, filter_infrastructure: bool = T
                 steps.append(agent)  # Add to steps in execution order
 
         else:
-            # For non-important spans (embedding, rerank, task, chain, etc.),
-            # still count token usage if available
+            # Bridge infrastructure spans kept by the filter for tree structure
+            if otel_span.ampAttributes.kind in INFRASTRUCTURE_KINDS:
+                chain = ChainSpan(
+                    span_id=otel_span.spanId,
+                    parent_span_id=otel_span.parentSpanId,
+                    start_time=_parse_timestamp(otel_span.startTime) if otel_span.startTime else None,
+                    name=otel_span.name or "",
+                )
+                steps.append(chain)
+
+            # Still count token usage if available
             tu = otel_span.ampAttributes.data.token_usage
             if tu:
                 token_usage = token_usage + TokenUsage(
@@ -334,11 +300,6 @@ def parse_trace_for_evaluation(trace: OTELTrace, filter_infrastructure: bool = T
     metrics = TraceMetrics(
         total_duration_ms=total_duration_ms,
         token_usage=token_usage,
-        llm_call_count=len(llm_spans),
-        tool_call_count=len(tool_spans),
-        retrieval_count=len(retriever_spans),
-        agent_span_count=len(agent_spans),
-        total_span_count=trace.spanCount if trace.spanCount is not None else len(trace.spans),
         error_count=error_count,
     )
 
@@ -405,14 +366,42 @@ def _parse_llm_span(otel_span: OTELSpan) -> LLMSpan:
         span_id=otel_span.spanId,
         parent_span_id=otel_span.parentSpanId,
         start_time=_parse_timestamp(otel_span.startTime),
-        messages=messages,
-        response=response,
-        tool_calls=tool_calls,
+        input=messages,
+        output=response,
+        available_tools=data.available_tools,
+        _tool_calls=tool_calls,
         model=data.model,
         vendor=data.vendor,
         temperature=data.temperature,
         metrics=metrics,
     )
+
+
+def _extract_tool_result(raw_output: Any) -> Any:
+    """Extract the actual tool result string from a raw output value.
+
+    Handles LangChain-style wrapped ToolMessage objects:
+      {"output": {"lc": 1, "type": "constructor", "id": [..., "ToolMessage"],
+                  "kwargs": {"content": "<actual result>"}}}
+    Falls back to the raw string or empty string.
+    """
+    if raw_output is None:
+        return ""
+    if isinstance(raw_output, str):
+        try:
+            raw_output = json.loads(raw_output)
+        except (json.JSONDecodeError, ValueError):
+            return raw_output
+    if isinstance(raw_output, dict):
+        # LangChain ToolMessage wrapper: {"output": {"lc": 1, ..., "kwargs": {"content": ...}}}
+        inner = raw_output.get("output") or raw_output
+        if isinstance(inner, dict) and inner.get("lc") == 1:
+            kwargs = inner.get("kwargs") or {}
+            content = kwargs.get("content")
+            if content is not None:
+                return content
+        return raw_output
+    return raw_output
 
 
 def _parse_tool_span(otel_span: OTELSpan) -> ToolSpan:
@@ -429,7 +418,11 @@ def _parse_tool_span(otel_span: OTELSpan) -> ToolSpan:
     if isinstance(raw_input, dict):
         arguments = raw_input
     elif isinstance(raw_input, str):
-        arguments = {"input": raw_input}
+        try:
+            parsed = json.loads(raw_input)
+            arguments = parsed if isinstance(parsed, dict) else {"input": raw_input}
+        except (json.JSONDecodeError, ValueError):
+            arguments = {"input": raw_input}
     else:
         arguments = {}
 
@@ -440,13 +433,15 @@ def _parse_tool_span(otel_span: OTELSpan) -> ToolSpan:
         error_message=st.error_message,
     )
 
+    result = _extract_tool_result(amp.output)
+
     return ToolSpan(
         span_id=otel_span.spanId,
         parent_span_id=otel_span.parentSpanId,
         start_time=_parse_timestamp(otel_span.startTime),
         name=name,
         arguments=arguments,
-        result=amp.output or "",
+        result=result,
         metrics=metrics,
     )
 
@@ -495,7 +490,7 @@ def _parse_agent_span(otel_span: OTELSpan) -> AgentSpan:
     data = amp.data
     st = amp.status
 
-    # available_tools already normalised to List[str] in AmpSpanData
+    # available_tools already normalised to List[ToolDefinition] in AmpSpanData
     tu = data.token_usage
     token_usage = (
         TokenUsage(
@@ -573,7 +568,7 @@ def _parse_messages(raw_input: Any) -> list:
                     messages.append(
                         AssistantMessage(
                             content=content,
-                            tool_calls=_parse_tool_calls(item.get("tool_calls", [])),
+                            tool_calls=_parse_tool_calls(item.get("tool_calls") or item.get("toolCalls") or []),
                         )
                     )
                 elif role == "tool":
@@ -615,10 +610,14 @@ def _parse_tool_calls_from_output(raw_output: Any) -> List[ToolCall]:
 
     if isinstance(raw_output, list):
         for item in raw_output:
-            if isinstance(item, dict) and item.get("tool_calls"):
-                tool_calls.extend(_parse_tool_calls(item["tool_calls"]))
-    elif isinstance(raw_output, dict) and raw_output.get("tool_calls"):
-        tool_calls.extend(_parse_tool_calls(raw_output["tool_calls"]))
+            if isinstance(item, dict):
+                raw_tcs = item.get("tool_calls") or item.get("toolCalls")
+                if raw_tcs:
+                    tool_calls.extend(_parse_tool_calls(raw_tcs))
+    elif isinstance(raw_output, dict):
+        raw_tcs = raw_output.get("tool_calls") or raw_output.get("toolCalls")
+        if raw_tcs:
+            tool_calls.extend(_parse_tool_calls(raw_tcs))
 
     return tool_calls
 
@@ -635,12 +634,25 @@ def _parse_llm_response(raw_output: Any) -> str:
         return raw_output.get("content", str(raw_output))
 
     if isinstance(raw_output, list):
-        # Usually a list of message dicts
+        # Usually a list of message dicts — try text content first, then
+        # fall back to a summary of tool calls so the output isn't blank.
+        text_parts: list[str] = []
+        tool_call_parts: list[str] = []
         for item in raw_output:
-            if isinstance(item, dict):
-                content = item.get("content", "")
-                if content:
-                    return content
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content", "")
+            if content:
+                text_parts.append(content if isinstance(content, str) else str(content))
+            for tc in item.get("toolCalls") or item.get("tool_calls") or []:
+                if isinstance(tc, dict):
+                    name = tc.get("name", "unknown")
+                    args = tc.get("arguments", "")
+                    tool_call_parts.append(f"[tool_call: {name}({args})]")
+        if text_parts:
+            return "\n".join(text_parts)
+        if tool_call_parts:
+            return "\n".join(tool_call_parts)
         return ""
 
     return str(raw_output)

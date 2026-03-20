@@ -108,7 +108,7 @@ func (s *monitorManagerService) CreateMonitor(ctx context.Context, orgName strin
 	}
 
 	// Validate evaluators against catalog schema
-	if err := s.validateEvaluators(ctx, req.Evaluators); err != nil {
+	if err := s.validateEvaluators(ctx, orgName, req.Evaluators); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +279,7 @@ func (s *monitorManagerService) UpdateMonitor(ctx context.Context, orgName, proj
 
 	// Validate evaluators against catalog schema if provided
 	if req.Evaluators != nil {
-		if err := s.validateEvaluators(ctx, *req.Evaluators); err != nil {
+		if err := s.validateEvaluators(ctx, monitor.OrgName, *req.Evaluators); err != nil {
 			return nil, err
 		}
 	}
@@ -292,10 +292,19 @@ func (s *monitorManagerService) UpdateMonitor(ctx context.Context, orgName, proj
 		monitor.Evaluators = *req.Evaluators
 	}
 	if req.LLMProviderConfigs != nil {
-		if err := s.validateLLMProviderConfigs(ctx, *req.LLMProviderConfigs); err != nil {
+		// Decrypt existing configs so we can merge with incoming values
+		decrypted, err := utils.DecryptLLMProviderConfigs(monitor.LLMProviderConfigs, s.encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt existing LLM provider configs: %w", err)
+		}
+
+		// Merge: empty value = preserve existing, absent = delete, non-empty = update
+		merged := mergeLLMProviderConfigs(decrypted, *req.LLMProviderConfigs)
+
+		if err := s.validateLLMProviderConfigs(ctx, merged); err != nil {
 			return nil, err
 		}
-		enc, err := utils.EncryptLLMProviderConfigs(*req.LLMProviderConfigs, s.encryptionKey)
+		enc, err := utils.EncryptLLMProviderConfigs(merged, s.encryptionKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt LLM provider configs: %w", err)
 		}
@@ -378,19 +387,8 @@ func (s *monitorManagerService) DeleteMonitor(ctx context.Context, orgName, proj
 
 	// Clean up WorkflowRun CRs for all runs
 	for _, run := range runs {
-		deleteCR := map[string]interface{}{
-			"apiVersion": workflowRunAPIVersion,
-			"kind":       resourceKindWorkflowRun,
-			"metadata": map[string]interface{}{
-				"name":      run.Name,
-				"namespace": orgName,
-			},
-		}
-		if err := s.ocClient.DeleteResource(ctx, deleteCR); err != nil {
-			// Log but don't fail — DB is already cleaned up
-			s.logger.Debug("Failed to delete WorkflowRun CR (may already be deleted)",
-				"workflowRunName", run.Name, "error", err)
-		}
+		// Todo: Implement Cleanup when openchoreo support is available. For now, just log the intent.
+		s.logger.Info("Monitor deleted - would clean up WorkflowRun CR", "monitorName", monitorName, "runID", run.ID)
 	}
 
 	s.logger.Info("Monitor deleted successfully", "name", monitorName)
@@ -526,6 +524,11 @@ func (s *monitorManagerService) ListMonitorRuns(ctx context.Context, orgName, pr
 				if aggs == nil {
 					aggs = make(map[string]interface{})
 				}
+				// When all evaluations were skipped, clear aggregations so the
+				// frontend receives null/empty instead of a misleading 0.
+				if eval.Count > 0 && eval.SkippedCount >= eval.Count {
+					aggs = make(map[string]interface{})
+				}
 				scoresByRun[runID] = append(scoresByRun[runID], models.EvaluatorScoreSummary{
 					EvaluatorName: eval.EvaluatorName,
 					Level:         eval.Level,
@@ -622,7 +625,7 @@ func (s *monitorManagerService) GetMonitorRunLogs(ctx context.Context, orgName, 
 	}
 
 	// Fetch logs from observer service using the workflow run name
-	logs, err := s.observabilitySvcClient.GetWorkflowRunLogs(ctx, run.Name)
+	logs, err := s.observabilitySvcClient.GetWorkflowRunLogs(ctx, run.Name, orgName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow run logs: %w", err)
 	}
@@ -719,6 +722,29 @@ func (s *monitorManagerService) validateCreateRequest(req *models.CreateMonitorR
 	return nil
 }
 
+// mergeLLMProviderConfigs merges incoming configs with existing (decrypted) ones.
+// Empty Value means preserve existing; absent from incoming means delete; non-empty Value means update.
+func mergeLLMProviderConfigs(existingDecrypted, incoming []models.MonitorLLMProviderConfig) []models.MonitorLLMProviderConfig {
+	existingByKey := make(map[string]models.MonitorLLMProviderConfig, len(existingDecrypted))
+	for _, c := range existingDecrypted {
+		existingByKey[c.ProviderName+"\x00"+c.EnvVar] = c
+	}
+	merged := make([]models.MonitorLLMProviderConfig, 0, len(incoming))
+	for _, inc := range incoming {
+		key := inc.ProviderName + "\x00" + inc.EnvVar
+		if inc.Value == "" {
+			// No new value provided — preserve existing secret if present
+			if ex, ok := existingByKey[key]; ok {
+				merged = append(merged, ex)
+			}
+		} else {
+			// New value provided — use it (will be encrypted later)
+			merged = append(merged, inc)
+		}
+	}
+	return merged
+}
+
 // validateLLMProviderConfigs validates each LLM provider config entry against the catalog.
 // For each entry, the provider is looked up by name and the env var is checked against
 // that provider's config fields.
@@ -756,7 +782,7 @@ func (s *monitorManagerService) validateLLMProviderConfigs(ctx context.Context, 
 
 // validateEvaluators validates evaluators against the catalog schema and populates defaults.
 // It mutates evaluator configs in-place to fill in default values from the schema.
-func (s *monitorManagerService) validateEvaluators(ctx context.Context, evaluators []models.MonitorEvaluator) error {
+func (s *monitorManagerService) validateEvaluators(ctx context.Context, orgName string, evaluators []models.MonitorEvaluator) error {
 	// Check for duplicate displayNames
 	displayNames := make(map[string]int) // displayName -> first index
 	for i, eval := range evaluators {
@@ -771,8 +797,8 @@ func (s *monitorManagerService) validateEvaluators(ctx context.Context, evaluato
 		eval := &evaluators[i]
 		prefix := fmt.Sprintf("evaluators[%d]", i)
 
-		// Check evaluator exists in catalog
-		evaluatorResp, err := s.evaluatorService.GetEvaluator(ctx, nil, eval.Identifier)
+		// Check evaluator exists in catalog or custom evaluators
+		evaluatorResp, err := s.evaluatorService.GetEvaluator(ctx, orgName, eval.Identifier)
 		if err != nil {
 			if errors.Is(err, utils.ErrEvaluatorNotFound) {
 				return fmt.Errorf("%s: evaluator %q not found in catalog: %w",

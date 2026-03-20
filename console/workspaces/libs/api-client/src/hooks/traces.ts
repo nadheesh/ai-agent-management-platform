@@ -16,7 +16,6 @@
  * under the License.
  */
 
-import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   getTimeRange,
   TraceListResponse,
@@ -27,6 +26,7 @@ import {
 } from "@agent-management-platform/types";
 import { getTrace, getTraceList, exportTraces } from "../apis/traces";
 import { useAuthHooks } from "@agent-management-platform/auth";
+import { useApiMutation, useApiQuery } from "./react-query-notifications";
 
 export function useTraceList(
   orgName?: string,
@@ -36,17 +36,31 @@ export function useTraceList(
   timeRange?: TraceListTimeRange | undefined,
   limit?: number | undefined,
   offset?: number | undefined,
-  sortOrder?: GetTraceListPathParams['sortOrder'] | undefined
+  sortOrder?: GetTraceListPathParams['sortOrder'] | undefined,
+  customStartTime?: string,
+  customEndTime?: string,
 ) {
   const { getToken } = useAuthHooks();
 
-  return useQuery({
-    queryKey: ["trace-list", orgName, projName, agentName, envId, timeRange, limit, offset, sortOrder],
+  const hasCustomRange = !!customStartTime && !!customEndTime;
+
+  return useApiQuery({
+    queryKey: ["trace-list", orgName, projName, agentName, envId, timeRange, limit, offset, sortOrder, customStartTime, customEndTime],
     queryFn: async () => {
-      if (!orgName || !projName || !agentName || !envId || !timeRange) {
+      if (!orgName || !projName || !agentName || !envId) {
         throw new Error("Missing required parameters");
       }
-      const { startTime, endTime } = getTimeRange(timeRange);
+      let startTime: string;
+      let endTime: string;
+      if (hasCustomRange) {
+        startTime = customStartTime;
+        endTime = customEndTime;
+      } else {
+        if (!timeRange) {
+          throw new Error("Missing required parameters");
+        }
+        ({ startTime, endTime } = getTimeRange(timeRange));
+      }
       const res = await getTraceList(
         {
           orgName,
@@ -66,8 +80,8 @@ export function useTraceList(
       }
       return res;
     },
-    refetchInterval: 30000, // 30 seconds
-    enabled: !!orgName && !!projName && !!agentName && !!envId,
+    refetchInterval: hasCustomRange ? false : 30000, // Don't auto-refresh for custom ranges
+    enabled: !!orgName && !!projName && !!agentName && !!envId && (hasCustomRange || !!timeRange),
   });
 }
 
@@ -79,7 +93,7 @@ export function useTrace(
   traceId: string
 ) {
   const { getToken } = useAuthHooks();
-  return useQuery({
+  return useApiQuery({
     queryKey: ["trace", orgName, projName, agentName, envId, traceId],
     queryFn: async () => {
       const res = await getTrace(
@@ -101,7 +115,8 @@ export function useTrace(
 export function useExportTraces() {
   const { getToken } = useAuthHooks();
 
-  return useMutation({
+  return useApiMutation({
+    action: { verb: 'create', target: 'trace export' },
     mutationFn: async (params: ExportTracesPathParams): Promise<TraceExportResponse> => {
       return await exportTraces(params, getToken);
     },

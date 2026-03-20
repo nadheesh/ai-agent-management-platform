@@ -116,39 +116,68 @@ type UpdateComponentBuildParametersRequest struct {
 	Repository     *RepositoryConfig     // nil if no change
 	Build          *BuildConfig          // nil if no change
 	InputInterface *InputInterfaceConfig // nil if no change
+	AgentType      AgentTypeConfig       // Required for determining endpoint defaults
 }
 
 // UpdateComponentResourceConfigsRequest contains data for updating resource configurations of a component
 type UpdateComponentResourceConfigsRequest struct {
-	Replicas  *int32          // nil if no change
-	Resources *ResourceConfig // nil if no change
+	Replicas    *int32             // nil if no change
+	Resources   *ResourceConfig    // nil if no change
+	AutoScaling *AutoScalingConfig // nil if no change
 }
 
 // ResourceConfig contains CPU and memory resource configurations
 type ResourceConfig struct {
-	Requests *ResourceRequests // nil if no change
-	Limits   *ResourceLimits   // nil if no change
+	Requests *ResourceRequests `json:"requests,omitempty"`
+	Limits   *ResourceLimits   `json:"limits,omitempty"`
 }
 
 // ResourceRequests contains resource requests
 type ResourceRequests struct {
-	CPU    string
-	Memory string
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory,omitempty"`
 }
 
 // ResourceLimits contains resource limits
 type ResourceLimits struct {
-	CPU    string
-	Memory string
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory,omitempty"`
+}
+
+// AutoScalingConfig contains autoscaling configuration (must match hpa-trait.yaml envOverrides schema)
+type AutoScalingConfig struct {
+	Enabled                        *bool  `json:"enabled,omitempty"`
+	MinReplicas                    *int32 `json:"minReplicas,omitempty"`
+	MaxReplicas                    *int32 `json:"maxReplicas,omitempty"`
+	TargetCPUUtilizationPercentage *int32 `json:"cpuUtilizationPercentage,omitempty"`
+}
+
+// CORSConfig contains CORS configuration
+type CORSConfig struct {
+	AllowOrigin  []string `json:"allowOrigin,omitempty"`
+	AllowMethods []string `json:"allowMethods,omitempty"`
+	AllowHeaders []string `json:"allowHeaders,omitempty"`
+}
+
+// ComponentParameters represents the component type parameters (must match agent-api.yaml schema)
+type ComponentParameters struct {
+	Exposed bool `json:"exposed"`
+}
+
+// EnvOverrideParameters represents environment-specific overrides (must match agent-api.yaml envOverrides schema)
+type EnvOverrideParameters struct {
+	Replicas        *int               `json:"replicas,omitempty"`
+	Resources       *ResourceConfig    `json:"resources,omitempty"`
+	ImagePullPolicy string             `json:"imagePullPolicy,omitempty"`
+	RestartedAt     string             `json:"restartedAt,omitempty"`
+	Autoscaling     *AutoScalingConfig `json:"autoscaling,omitempty"`
 }
 
 // ComponentResourceConfigsResponse contains resource configurations response
 type ComponentResourceConfigsResponse struct {
-	Replicas             *int32          // Current replicas (env-specific or default)
-	Resources            *ResourceConfig // Current resources (env-specific or default)
-	DefaultReplicas      *int32          // Component-level default replicas (only when env provided)
-	DefaultResources     *ResourceConfig // Component-level default resources (only when env provided)
-	IsDefaultsOverridden *bool           // Whether env-specific overrides exist (only when env provided)
+	Replicas    *int32             // Current replicas
+	Resources   *ResourceConfig    // Current resources
+	AutoScaling *AutoScalingConfig // Current autoscaling configuration (if applicable)
 }
 
 // DeployRequest contains data for deploying a component
@@ -192,10 +221,12 @@ type buildpackConfigs struct {
 }
 
 type workflowEndpoint struct {
-	Name           string `json:"name"`
-	Port           int32  `json:"port"`
-	Type           string `json:"type"`
-	SchemaFilePath string `json:"schemaFilePath,omitempty"`
+	Name           string   `json:"name"`
+	Port           int32    `json:"port"`
+	Type           string   `json:"type"`
+	BasePath       string   `json:"basePath"`
+	Visibility     []string `json:"visibility"`
+	SchemaFilePath string   `json:"schemaFilePath,omitempty"`
 }
 
 // CreateSecretReferenceRequest contains data for creating a SecretReference CR

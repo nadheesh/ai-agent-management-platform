@@ -471,7 +471,7 @@ func ConvertSpecToModelUpstreamConfig(config spec.UpstreamConfig) models.Upstrea
 
 	if config.Main != nil {
 		main := models.UpstreamEndpoint{
-			URL: *config.Main.Url,
+			URL: config.Main.GetUrl(),
 			Ref: ptrToString(config.Main.Ref),
 		}
 		if config.Main.Auth != nil {
@@ -486,7 +486,7 @@ func ConvertSpecToModelUpstreamConfig(config spec.UpstreamConfig) models.Upstrea
 
 	if config.Sandbox != nil {
 		sandbox := models.UpstreamEndpoint{
-			URL: *config.Sandbox.Url,
+			URL: config.Sandbox.GetUrl(),
 			Ref: ptrToString(config.Sandbox.Ref),
 		}
 		if config.Sandbox.Auth != nil {
@@ -515,8 +515,9 @@ func ConvertModelToSpecUpstreamConfig(config models.UpstreamConfig) spec.Upstrea
 			// Mask credential value in API responses for security
 			maskedValue := "***REDACTED***"
 			main.Auth = &spec.UpstreamAuth{
-				Type:  *config.Main.Auth.Type,
-				Value: &maskedValue,
+				Type:   *config.Main.Auth.Type,
+				Header: config.Main.Auth.Header,
+				Value:  &maskedValue,
 			}
 		}
 		specConfig.Main = &main
@@ -531,8 +532,9 @@ func ConvertModelToSpecUpstreamConfig(config models.UpstreamConfig) spec.Upstrea
 			// Mask credential value in API responses for security
 			maskedValue := "***REDACTED***"
 			sandbox.Auth = &spec.UpstreamAuth{
-				Type:  *config.Sandbox.Auth.Type,
-				Value: &maskedValue,
+				Type:   *config.Sandbox.Auth.Type,
+				Header: config.Main.Auth.Header,
+				Value:  &maskedValue,
 			}
 		}
 		specConfig.Sandbox = &sandbox

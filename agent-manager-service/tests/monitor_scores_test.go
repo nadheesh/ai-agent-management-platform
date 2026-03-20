@@ -159,6 +159,10 @@ func (s *stubMonitorRepo) ListPendingOrRunningRuns(_ int) ([]models.MonitorRun, 
 	return nil, nil
 }
 
+func (s *stubMonitorRepo) FindActiveMonitorsByEvaluatorIdentifier(_ string, _ string) ([]models.Monitor, error) {
+	return nil, nil
+}
+
 // newScoresHandler builds a minimal ServeMux wired to a scores controller backed by
 // a stub repository that returns "not found" for all monitor lookups.
 func newScoresHandler() http.Handler {
@@ -195,9 +199,10 @@ func TestCalculateAdaptiveGranularity(t *testing.T) {
 		{"50 points, 1 hour", time.Hour, 50, "trace"},
 
 		// Dense data (count > 50) → time-bucket granularity based on duration
-		{"51 points, 3 hours → minute", 3 * time.Hour, 51, "minute"},
-		{"51 points, exactly 6 hours → minute", 6 * time.Hour, 51, "minute"},
-		{"51 points, 6h + 1s → hour", 6*time.Hour + time.Second, 51, "hour"},
+		{"51 points, 1 hour → minute", time.Hour, 51, "minute"},
+		{"51 points, exactly 3 hours → minute", 3 * time.Hour, 51, "minute"},
+		{"51 points, 3h + 1s → hour", 3*time.Hour + time.Second, 51, "hour"},
+		{"51 points, 6 hours → hour", 6 * time.Hour, 51, "hour"},
 		{"51 points, 3 days → hour", 3 * 24 * time.Hour, 51, "hour"},
 		{"51 points, exactly 7 days → hour", 7 * 24 * time.Hour, 51, "hour"},
 		{"51 points, 7 days + 1 sec → day", 7*24*time.Hour + time.Second, 51, "day"},

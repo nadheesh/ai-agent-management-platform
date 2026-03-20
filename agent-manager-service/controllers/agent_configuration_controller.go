@@ -74,7 +74,7 @@ func (c *agentConfigurationController) CreateAgentModelConfig(w http.ResponseWri
 
 	if err := utils.ValidateConfigName(specReq.Name); err != nil {
 		log.Warn("CreateAgentModelConfig: invalid name", "error", err)
-		utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+		utils.WriteValidationErrorResponse(w, err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (c *agentConfigurationController) CreateAgentModelConfig(w http.ResponseWri
 			utils.WriteErrorResponse(w, http.StatusNotFound, "LLM provider not found")
 			return
 		case errors.Is(err, utils.ErrInvalidInput):
-			utils.WriteErrorResponse(w, http.StatusBadRequest, "Invalid input")
+			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, utils.ErrUnauthorized):
 			utils.WriteErrorResponse(w, http.StatusUnauthorized, "Unauthorized access")
@@ -222,7 +222,7 @@ func (c *agentConfigurationController) UpdateAgentModelConfig(w http.ResponseWri
 	if specReq.Name != nil {
 		if err := utils.ValidateConfigName(*specReq.Name); err != nil {
 			log.Warn("UpdateAgentModelConfig: invalid name", "error", err)
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
+			utils.WriteValidationErrorResponse(w, err)
 			return
 		}
 	}
@@ -245,7 +245,7 @@ func (c *agentConfigurationController) UpdateAgentModelConfig(w http.ResponseWri
 			utils.WriteErrorResponse(w, http.StatusNotFound, "LLM provider not found")
 			return
 		case errors.Is(err, utils.ErrInvalidInput):
-			utils.WriteErrorResponse(w, http.StatusBadRequest, "Invalid input")
+			utils.WriteErrorResponse(w, http.StatusBadRequest, err.Error())
 			return
 		default:
 			log.Error("UpdateAgentModelConfig: failed to update configuration", "error", err)
@@ -305,11 +305,20 @@ func convertCreateAgentModelConfigRequest(specReq spec.CreateAgentModelConfigReq
 		}
 	}
 
+	var envVars []models.EnvironmentVariableConfig
+	if specReq.EnvironmentVariables != nil {
+		envVars = make([]models.EnvironmentVariableConfig, 0, len(specReq.EnvironmentVariables))
+		for _, ev := range specReq.EnvironmentVariables {
+			envVars = append(envVars, models.EnvironmentVariableConfig{Key: ev.Key, Name: ev.Name})
+		}
+	}
+
 	return models.CreateAgentModelConfigRequest{
-		Name:        specReq.Name,
-		Description: getString(specReq.Description),
-		Type:        specReq.Type,
-		EnvMappings: envMappings,
+		Name:                 specReq.Name,
+		Description:          getString(specReq.Description),
+		Type:                 specReq.Type,
+		EnvMappings:          envMappings,
+		EnvironmentVariables: envVars,
 	}, nil
 }
 
@@ -336,6 +345,12 @@ func convertUpdateAgentModelConfigRequest(specReq spec.UpdateAgentModelConfigReq
 			}
 		}
 		req.EnvMappings = envMappings
+	}
+	if specReq.EnvironmentVariables != nil {
+		req.EnvironmentVariables = make([]models.EnvironmentVariableConfig, 0, len(specReq.EnvironmentVariables))
+		for _, ev := range specReq.EnvironmentVariables {
+			req.EnvironmentVariables = append(req.EnvironmentVariables, models.EnvironmentVariableConfig{Key: ev.Key, Name: ev.Name})
+		}
 	}
 
 	return req, nil
@@ -408,7 +423,7 @@ func convertAgentModelConfigResponse(modelResp models.AgentModelConfigResponse) 
 		Type:                 modelResp.Type,
 		OrganizationName:     modelResp.OrganizationName,
 		ProjectName:          modelResp.ProjectName,
-		EnvMappings:          &envModelConfig,
+		EnvMappings:          envModelConfig,
 		EnvironmentVariables: envVars,
 		CreatedAt:            modelResp.CreatedAt,
 		UpdatedAt:            modelResp.UpdatedAt,

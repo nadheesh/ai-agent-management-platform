@@ -137,9 +137,8 @@ func ProvideSecretManagementClient(cfg config.Config) (secretmanagersvc.SecretMa
 	return secretmanagersvc.NewSecretManagementClient(&secretmanagersvc.StoreConfig{
 		Provider: cfg.SecretManager.Provider,
 		OpenBao: &secretmanagersvc.OpenBaoConfig{
-			Server:  cfg.OpenBao.URL,
-			Path:    cfg.OpenBao.Path,
-			Version: cfg.OpenBao.Version,
+			Server: cfg.OpenBao.URL,
+			Path:   cfg.OpenBao.Path,
 			Auth: &secretmanagersvc.OpenBaoAuth{
 				Token: cfg.OpenBao.Token,
 			},
@@ -162,6 +161,7 @@ var repositoryProviderSet = wire.NewSet(
 	ProvideCatalogRepository,
 	ProvideMonitorRepository,
 	ProvideAgentConfigRepository,
+	ProvideCustomEvaluatorRepository,
 	repositories.NewAgentConfigurationRepository,
 	repositories.NewEnvAgentModelMappingRepository,
 	repositories.NewAgentEnvConfigVariableRepository,
@@ -247,6 +247,10 @@ func ProvideMonitorRepository(db *gorm.DB) repositories.MonitorRepository {
 
 func ProvideAgentConfigRepository(db *gorm.DB) repositories.AgentConfigRepository {
 	return repositories.NewAgentConfigRepo(db)
+}
+
+func ProvideCustomEvaluatorRepository(db *gorm.DB) repositories.CustomEvaluatorRepository {
+	return repositories.NewCustomEvaluatorRepo(db)
 }
 
 // InitializeAppParams wires up all application dependencies

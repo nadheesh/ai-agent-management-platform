@@ -36,7 +36,7 @@ from amp_evaluation.evaluators.base import (  # noqa: E402
     FunctionLLMJudge,
     JudgeOutput,
 )
-from amp_evaluation.evaluators.params import EvalMode, EvaluationLevel  # noqa: E402
+from amp_evaluation.evaluators.params import EvalMode, EvaluationLevel, Param  # noqa: E402
 from amp_evaluation.models import EvalResult  # noqa: E402
 from amp_evaluation.dataset import Task  # noqa: E402
 from amp_evaluation.trace import Trace, TraceMetrics, TokenUsage  # noqa: E402
@@ -80,7 +80,7 @@ class _SimpleJudge(LLMAsJudgeEvaluator):
     """Minimal concrete subclass for testing (build_prompt is abstract)."""
 
     def build_prompt(self, trace: Trace, task: Optional[Task] = None) -> str:
-        prompt = f"Evaluate:\nInput: {trace.input}\nOutput: {trace.output}\nCriteria: {self.criteria}"
+        prompt = f"Evaluate:\nInput: {trace.input}\nOutput: {trace.output}"
         if task and task.expected_output:
             prompt += f"\n\nExpected Output: {task.expected_output}"
         if task and task.success_criteria:
@@ -99,7 +99,6 @@ class TestLLMAsJudgeInit:
     def test_default_params(self):
         evaluator = _SimpleJudge()
         assert evaluator.model == "gpt-4o-mini"
-        assert evaluator.criteria == "quality, accuracy, and helpfulness"
         assert evaluator.temperature == 0.0
         assert evaluator.max_tokens == 1024
         assert evaluator.max_retries == 2
@@ -107,13 +106,11 @@ class TestLLMAsJudgeInit:
     def test_custom_params(self):
         evaluator = _SimpleJudge(
             model="gpt-4o",
-            criteria="accuracy",
             temperature=0.5,
             max_tokens=2048,
             max_retries=3,
         )
         assert evaluator.model == "gpt-4o"
-        assert evaluator.criteria == "accuracy"
         assert evaluator.temperature == 0.5
         assert evaluator.max_tokens == 2048
         assert evaluator.max_retries == 3
@@ -124,7 +121,6 @@ class TestLLMAsJudgeInit:
         prompt = evaluator.build_prompt(trace)
         assert "What is AI?" in prompt
         assert "AI is artificial intelligence" in prompt
-        assert evaluator.criteria in prompt
 
 
 # =============================================================================
@@ -160,7 +156,7 @@ class TestLevelDetection:
             name = "llm-judge"
 
             def build_prompt(self, llm: LLMSpan) -> str:
-                return f"Evaluate LLM: {llm.response}"
+                return f"Evaluate LLM: {llm.output}"
 
         evaluator = LLMJudge()
         assert evaluator.level == EvaluationLevel.LLM
@@ -398,14 +394,13 @@ class TestLLMJudgeDecorator:
         assert quality_judge.name == "quality_judge"
 
     def test_decorator_with_config(self):
-        @llm_judge(model="gpt-4o", criteria="accuracy")
+        @llm_judge(model="gpt-4o")
         def grounding_judge(trace: Trace) -> str:
             return f"Grounding: {trace.output}"
 
         assert isinstance(grounding_judge, FunctionLLMJudge)
         assert grounding_judge.name == "grounding_judge"
         assert grounding_judge.model == "gpt-4o"
-        assert grounding_judge.criteria == "accuracy"
 
     def test_decorator_with_name(self):
         @llm_judge(name="custom-name")
@@ -525,3 +520,183 @@ class TestJudgeOutput:
         parsed = JudgeOutput.model_validate_json(json_str)
         assert parsed.score == 0.7
         assert parsed.explanation == "OK"
+
+
+# =============================================================================
+# FunctionLLMJudge — Param support and with_config
+# =============================================================================
+
+
+class TestFunctionLLMJudgeParams:
+    """Test that @llm_judge supports Param descriptors and with_config()."""
+
+    def test_param_defaults_extracted(self):
+        """Param defaults should be stored in _func_config."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="How strict"),
+        ) -> str:
+            return f"Evaluate with strictness {strictness}: {trace.output}"
+
+        assert my_judge._func_param_descriptors["strictness"] is not None
+        assert my_judge._func_config["strictness"] == 0.8
+
+    def test_param_injected_into_build_prompt(self):
+        """Config values should be injected when building the prompt."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="How strict"),
+        ) -> str:
+            return f"strictness={strictness} output={trace.output}"
+
+        trace = _make_trace()
+        prompt = my_judge._dispatch_build_prompt(trace, None)
+        assert "strictness=0.8" in prompt
+
+    def test_param_override_via_constructor(self):
+        """Param values can be overridden via decorator kwargs."""
+
+        @llm_judge(name="custom-judge", strictness=0.5)
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="How strict"),
+        ) -> str:
+            return f"strictness={strictness}"
+
+        assert my_judge._func_config["strictness"] == 0.5
+
+    def test_with_config_func_param(self):
+        """with_config() should create a copy with updated function Param values."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            threshold: float = Param(default=0.7, description="Threshold", min=0, max=1),
+        ) -> str:
+            return f"threshold={threshold}"
+
+        copy = my_judge.with_config(threshold=0.9)
+
+        assert copy is not my_judge
+        assert my_judge._func_config["threshold"] == 0.7
+        assert copy._func_config["threshold"] == 0.9
+
+    def test_with_config_llm_param(self):
+        """with_config() should also accept inherited LLM params like model."""
+
+        @llm_judge
+        def my_judge(trace: Trace) -> str:
+            return f"Evaluate: {trace.output}"
+
+        copy = my_judge.with_config(model="openai/gpt-4o", temperature=0.5)
+
+        assert copy.model == "openai/gpt-4o"
+        assert copy.temperature == 0.5
+        # Original unchanged
+        assert my_judge.temperature == 0.0
+
+    def test_with_config_mixed_params(self):
+        """with_config() should handle both function Params and LLM params together."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="Strictness"),
+        ) -> str:
+            return f"strictness={strictness}"
+
+        copy = my_judge.with_config(strictness=0.5, model="openai/gpt-4o")
+
+        assert copy._func_config["strictness"] == 0.5
+        assert copy.model == "openai/gpt-4o"
+
+    def test_with_config_unknown_key_raises(self):
+        """with_config() should raise TypeError for unknown keys."""
+
+        @llm_judge
+        def my_judge(trace: Trace) -> str:
+            return "prompt"
+
+        with pytest.raises(TypeError, match="Unknown config parameter"):
+            my_judge.with_config(nonexistent=42)
+
+    def test_with_config_validation(self):
+        """with_config() should validate Param constraints."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            threshold: float = Param(default=0.5, description="Threshold", min=0, max=1),
+        ) -> str:
+            return "prompt"
+
+        with pytest.raises(ValueError):
+            my_judge.with_config(threshold=5.0)
+
+    def test_config_schema_includes_func_params(self):
+        """info.config_schema should include both LLM params and function params."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="How strict"),
+        ) -> str:
+            return "prompt"
+
+        schema = my_judge.info.config_schema
+        keys = [s["key"] for s in schema]
+        # LLM params from LLMAsJudgeEvaluator
+        assert "model" in keys
+        assert "temperature" in keys
+        # Function param
+        assert "strictness" in keys
+
+    def test_mode_detection_skips_param_defaults(self):
+        """Param params should not affect mode detection."""
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="Strictness"),
+        ) -> str:
+            return "prompt"
+
+        # No task param (ignoring Param defaults) → both modes
+        modes = my_judge._supported_eval_modes
+        assert EvalMode.EXPERIMENT in modes
+        assert EvalMode.MONITOR in modes
+
+    def test_docstring_used_as_description(self):
+        """Function docstring should be used as evaluator description."""
+
+        @llm_judge
+        def my_judge(trace: Trace) -> str:
+            """Check response quality."""
+            return "prompt"
+
+        assert my_judge.description == "Check response quality."
+
+    @patch("litellm.completion")
+    def test_end_to_end_with_params(self, mock_completion):
+        """Full evaluate() call with Param injection into prompt."""
+        mock_completion.return_value = _mock_litellm_response(0.9, "Great")
+
+        @llm_judge
+        def my_judge(
+            trace: Trace,
+            strictness: float = Param(default=0.8, description="Strictness"),
+        ) -> str:
+            return f"Evaluate with strictness={strictness}: {trace.output}"
+
+        trace = _make_trace()
+        result = my_judge.evaluate(trace)
+
+        assert result.score == 0.9
+        # Verify the prompt sent to LLM includes the config value
+        call_args = mock_completion.call_args
+        prompt_sent = call_args[1]["messages"][0]["content"]
+        assert "strictness=0.8" in prompt_sent

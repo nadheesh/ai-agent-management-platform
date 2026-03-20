@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/wso2/ai-agent-management-platform/agent-manager-service/clients/clientmocks"
+	"github.com/wso2/ai-agent-management-platform/agent-manager-service/clients/openchoreosvc/client"
 	"github.com/wso2/ai-agent-management-platform/agent-manager-service/db"
 	"github.com/wso2/ai-agent-management-platform/agent-manager-service/middleware/jwtassertion"
 	"github.com/wso2/ai-agent-management-platform/agent-manager-service/models"
@@ -61,11 +62,13 @@ func timePtr(t time.Time) *time.Time {
 // for dependencies required by monitor tests
 func createBaseMockChoreoClient() *clientmocks.OpenChoreoClientMock {
 	return &clientmocks.OpenChoreoClientMock{
-		ApplyResourceFunc: func(ctx context.Context, body map[string]interface{}) error {
-			return nil
-		},
-		DeleteResourceFunc: func(ctx context.Context, body map[string]interface{}) error {
-			return nil
+		CreateWorkflowRunFunc: func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+			return &client.WorkflowRunResponse{
+				Name:         "test-workflow-run-123",
+				WorkflowName: req.WorkflowName,
+				Status:       "Running",
+				OrgName:      namespaceName,
+			}, nil
 		},
 		GetComponentFunc: func(ctx context.Context, namespaceName string, projectName string, componentName string) (*models.AgentResponse, error) {
 			return &models.AgentResponse{
@@ -104,13 +107,18 @@ func createBaseMockChoreoClient() *clientmocks.OpenChoreoClientMock {
 func TestCreateFutureMonitor(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	// Track if CR was created (should NOT be for future monitor)
-	crCreated := false
+	// Track if workflow run was created (should NOT be for future monitor)
+	workflowRunCreated := false
 
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.ApplyResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		crCreated = true
-		return nil
+	mockChoreoClient.CreateWorkflowRunFunc = func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+		workflowRunCreated = true
+		return &client.WorkflowRunResponse{
+			Name:         "test-workflow-run-123",
+			WorkflowName: req.WorkflowName,
+			Status:       "Running",
+			OrgName:      namespaceName,
+		}, nil
 	}
 
 	testClients := wiring.TestClients{
@@ -159,26 +167,29 @@ func TestCreateFutureMonitor(t *testing.T) {
 	assert.Equal(t, "length_compliance", result.Evaluators[1].Identifier)
 	assert.Equal(t, "Active", result.Status)
 
-	// Future monitor should NOT trigger immediate CR creation
-	assert.False(t, crCreated, "Future monitor should not create CR immediately")
+	// Future monitor should NOT trigger immediate workflow run creation
+	assert.False(t, workflowRunCreated, "Future monitor should not create workflow run immediately")
 }
 
 // TestCreatePastMonitor tests creating a past monitor with time range
 func TestCreatePastMonitor(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	// Track if CR was created
-	crCreated := false
+	// Track if workflow run was created
+	workflowRunCreated := false
 
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.ApplyResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		// Verify WorkflowRun structure
-		kind, ok := body["kind"].(string)
-		assert.True(t, ok, "kind should be string")
-		assert.Equal(t, "WorkflowRun", kind)
+	mockChoreoClient.CreateWorkflowRunFunc = func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+		// Verify workflow name
+		assert.Equal(t, "monitor-evaluation-workflow", req.WorkflowName)
 
-		crCreated = true
-		return nil
+		workflowRunCreated = true
+		return &client.WorkflowRunResponse{
+			Name:         "test-workflow-run-123",
+			WorkflowName: req.WorkflowName,
+			Status:       "Running",
+			OrgName:      namespaceName,
+		}, nil
 	}
 
 	testClients := wiring.TestClients{
@@ -216,7 +227,7 @@ func TestCreatePastMonitor(t *testing.T) {
 	}
 
 	require.Equal(t, http.StatusCreated, w.Code)
-	assert.True(t, crCreated, "WorkflowRun CR should be created for past monitor")
+	assert.True(t, workflowRunCreated, "WorkflowRun should be created for past monitor")
 
 	var result spec.MonitorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &result)
@@ -1145,25 +1156,20 @@ func TestDeleteMonitor_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-// TestDeleteMonitor_CRDeletionFailure tests that DB is still cleaned despite CR deletion errors
-func TestDeleteMonitor_CRDeletionFailure(t *testing.T) {
+// TestDeleteMonitor_DBCleanup tests that DB is properly cleaned when deleting a monitor
+func TestDeleteMonitor_DBCleanup(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	deleteResourceCalled := false
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.DeleteResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		deleteResourceCalled = true
-		return fmt.Errorf("CR deletion failed")
-	}
 
 	testClients := wiring.TestClients{OpenChoreoClient: mockChoreoClient}
 	app := apitestutils.MakeAppClientWithDeps(t, testClients, authMiddleware)
 
 	// Create monitor
-	monitorName := uniqueMonitorName("cr-delete-fail")
+	monitorName := uniqueMonitorName("db-cleanup")
 	reqBody := spec.CreateMonitorRequest{
 		Name:            monitorName,
-		DisplayName:     "CR Delete Fail Test",
+		DisplayName:     "DB Cleanup Test",
 		EnvironmentName: "dev",
 		Type:            "future",
 		IntervalMinutes: int32Ptr(60),
@@ -1182,12 +1188,12 @@ func TestDeleteMonitor_CRDeletionFailure(t *testing.T) {
 	}
 	require.Equal(t, http.StatusCreated, w.Code)
 
-	// Delete monitor (should succeed despite CR deletion failure)
+	// Delete monitor
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors/"+monitorName, nil)
 	w = httptest.NewRecorder()
 	app.ServeHTTP(w, req)
 
-	// Should still return 204 (DB cleaned, CR cleanup logged but non-blocking)
+	// Should return 204
 	assert.Equal(t, http.StatusNoContent, w.Code)
 
 	// Verify monitor is deleted from DB
@@ -1195,23 +1201,22 @@ func TestDeleteMonitor_CRDeletionFailure(t *testing.T) {
 	w = httptest.NewRecorder()
 	app.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
-
-	// The fact that the monitor is deleted from DB despite CR deletion failure shows that:
-	// 1. DB cleanup happens first (critical operation)
-	// 2. CR cleanup is non-blocking (logged but doesn't fail the operation)
-	// deleteResourceCalled flag confirms DeleteResource was attempted
-	_ = deleteResourceCalled // Use the variable to indicate it's intentionally set but not asserted
 }
 
 // TestRerunMonitor tests rerunning a monitor execution
 func TestRerunMonitor(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	crCallCount := 0
+	workflowRunCallCount := 0
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.ApplyResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		crCallCount++
-		return nil
+	mockChoreoClient.CreateWorkflowRunFunc = func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+		workflowRunCallCount++
+		return &client.WorkflowRunResponse{
+			Name:         fmt.Sprintf("test-workflow-run-%d", workflowRunCallCount),
+			WorkflowName: req.WorkflowName,
+			Status:       "Running",
+			OrgName:      namespaceName,
+		}, nil
 	}
 
 	testClients := wiring.TestClients{
@@ -1254,7 +1259,7 @@ func TestRerunMonitor(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &created)
 	require.NoError(t, err)
 
-	initialCallCount := crCallCount
+	initialCallCount := workflowRunCallCount
 
 	// List monitor runs
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors/"+created.Name+"/runs", nil)
@@ -1280,7 +1285,7 @@ func TestRerunMonitor(t *testing.T) {
 	app.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusCreated, w.Code)
-	assert.Greater(t, crCallCount, initialCallCount, "Rerun should create a new WorkflowRun CR")
+	assert.Greater(t, workflowRunCallCount, initialCallCount, "Rerun should create a new WorkflowRun")
 
 	var rerunResult spec.MonitorRunResponse
 	err = json.Unmarshal(w.Body.Bytes(), &rerunResult)
@@ -1295,7 +1300,7 @@ func TestGetMonitorRunLogs(t *testing.T) {
 	mockChoreoClient := createBaseMockChoreoClient()
 
 	mockObservabilityClient := &clientmocks.ObservabilitySvcClientMock{
-		GetWorkflowRunLogsFunc: func(ctx context.Context, workflowRunName string) (*models.LogsResponse, error) {
+		GetWorkflowRunLogsFunc: func(ctx context.Context, workflowRunName string, namespaceName string) (*models.LogsResponse, error) {
 			return &models.LogsResponse{
 				Logs: []models.LogEntry{
 					{
@@ -1376,6 +1381,11 @@ func TestGetMonitorRunLogs(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "Sample log output")
+
+	// Verify the correct namespace was passed to the observability client
+	calls := mockObservabilityClient.GetWorkflowRunLogsCalls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "test-org", calls[0].NamespaceName)
 }
 
 // TestStopMonitor tests stopping a future monitor
@@ -2290,11 +2300,16 @@ func TestGetMonitor_LLMProviderConfigsRedacted(t *testing.T) {
 func TestUpdatePastMonitor_TriggersNewRun(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	crCallCount := 0
+	workflowRunCallCount := 0
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.ApplyResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		crCallCount++
-		return nil
+	mockChoreoClient.CreateWorkflowRunFunc = func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+		workflowRunCallCount++
+		return &client.WorkflowRunResponse{
+			Name:         fmt.Sprintf("test-workflow-run-%d", workflowRunCallCount),
+			WorkflowName: req.WorkflowName,
+			Status:       "Running",
+			OrgName:      namespaceName,
+		}, nil
 	}
 
 	testClients := wiring.TestClients{
@@ -2332,7 +2347,7 @@ func TestUpdatePastMonitor_TriggersNewRun(t *testing.T) {
 	}
 
 	require.Equal(t, http.StatusCreated, w.Code)
-	callCountAfterCreate := crCallCount
+	callCountAfterCreate := workflowRunCallCount
 
 	// Update the past monitor (should trigger a new run)
 	updateBody := map[string]interface{}{
@@ -2347,7 +2362,7 @@ func TestUpdatePastMonitor_TriggersNewRun(t *testing.T) {
 	app.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Greater(t, crCallCount, callCountAfterCreate, "Update of past monitor should trigger a new WorkflowRun CR")
+	assert.Greater(t, workflowRunCallCount, callCountAfterCreate, "Update of past monitor should trigger a new WorkflowRun")
 
 	var updated spec.MonitorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &updated)
@@ -2360,11 +2375,16 @@ func TestUpdatePastMonitor_TriggersNewRun(t *testing.T) {
 func TestUpdateFutureMonitor_DoesNotTriggerRun(t *testing.T) {
 	authMiddleware := jwtassertion.NewMockMiddleware(t)
 
-	crCallCount := 0
+	workflowRunCallCount := 0
 	mockChoreoClient := createBaseMockChoreoClient()
-	mockChoreoClient.ApplyResourceFunc = func(ctx context.Context, body map[string]interface{}) error {
-		crCallCount++
-		return nil
+	mockChoreoClient.CreateWorkflowRunFunc = func(ctx context.Context, namespaceName string, req client.CreateWorkflowRunRequest) (*client.WorkflowRunResponse, error) {
+		workflowRunCallCount++
+		return &client.WorkflowRunResponse{
+			Name:         fmt.Sprintf("test-workflow-run-%d", workflowRunCallCount),
+			WorkflowName: req.WorkflowName,
+			Status:       "Running",
+			OrgName:      namespaceName,
+		}, nil
 	}
 
 	testClients := wiring.TestClients{
@@ -2396,7 +2416,7 @@ func TestUpdateFutureMonitor_DoesNotTriggerRun(t *testing.T) {
 	}
 	require.Equal(t, http.StatusCreated, w.Code)
 
-	callCountAfterCreate := crCallCount
+	callCountAfterCreate := workflowRunCallCount
 
 	// Update the future monitor
 	updateBody := map[string]interface{}{
@@ -2411,5 +2431,206 @@ func TestUpdateFutureMonitor_DoesNotTriggerRun(t *testing.T) {
 	app.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, callCountAfterCreate, crCallCount, "Update of future monitor should NOT trigger a WorkflowRun CR")
+	assert.Equal(t, callCountAfterCreate, workflowRunCallCount, "Update of future monitor should NOT trigger a WorkflowRun")
+}
+
+// TestUpdateMonitor_LLMProviderConfigsPreserved verifies that sending an empty
+// value for an existing LLM provider config preserves the original encrypted secret.
+func TestUpdateMonitor_LLMProviderConfigsPreserved(t *testing.T) {
+	authMiddleware := jwtassertion.NewMockMiddleware(t)
+	mockChoreoClient := createBaseMockChoreoClient()
+	testClients := wiring.TestClients{OpenChoreoClient: mockChoreoClient}
+	app := apitestutils.MakeAppClientWithDeps(t, testClients, authMiddleware)
+
+	// Create monitor with LLM config
+	monitorName := uniqueMonitorName("llm-preserve")
+	reqBody := spec.CreateMonitorRequest{
+		Name:            monitorName,
+		DisplayName:     "LLM Preserve Test",
+		EnvironmentName: "dev",
+		Type:            "future",
+		IntervalMinutes: int32Ptr(60),
+		Evaluators:      []spec.MonitorEvaluator{{Identifier: "latency_performance", DisplayName: "Latency Check", Config: map[string]interface{}{}}},
+		LlmProviderConfigs: []spec.MonitorLLMProviderConfig{
+			{ProviderName: "openai", EnvVar: "OPENAI_API_KEY", Value: "sk-original-secret"},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNotFound {
+		t.Skip("Skipping test - agent doesn't exist")
+		return
+	}
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	gdb := db.DB(context.Background())
+
+	// Update with empty value (simulates frontend sending unchanged config)
+	updateBody := map[string]interface{}{
+		"displayName": "Updated Name",
+		"llmProviderConfigs": []map[string]interface{}{
+			{"providerName": "openai", "envVar": "OPENAI_API_KEY", "value": ""},
+		},
+	}
+
+	body, _ = json.Marshal(updateBody)
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors/"+monitorName, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// Verify response still shows config with redacted value
+	var result spec.MonitorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	require.Len(t, result.LlmProviderConfigs, 1)
+	assert.Equal(t, "openai", result.LlmProviderConfigs[0].ProviderName)
+	assert.Equal(t, "****", result.LlmProviderConfigs[0].Value)
+
+	// Verify DB still has an encrypted (non-empty, non-plaintext) value.
+	// Note: AES-GCM uses random nonces, so the ciphertext changes on re-encryption
+	// even for the same plaintext. We verify the secret is preserved by checking
+	// the value is encrypted (not empty or plaintext).
+	var dbMonitorAfter models.Monitor
+	require.NoError(t, gdb.Where("name = ? AND org_name = ?", monitorName, "test-org").First(&dbMonitorAfter).Error)
+	require.Len(t, dbMonitorAfter.LLMProviderConfigs, 1)
+	assert.NotEmpty(t, dbMonitorAfter.LLMProviderConfigs[0].Value,
+		"Preserved config should have an encrypted value, not empty")
+	assert.NotEqual(t, "sk-original-secret", dbMonitorAfter.LLMProviderConfigs[0].Value,
+		"DB should not store plaintext")
+	assert.Equal(t, "openai", dbMonitorAfter.LLMProviderConfigs[0].ProviderName)
+	assert.Equal(t, "OPENAI_API_KEY", dbMonitorAfter.LLMProviderConfigs[0].EnvVar)
+}
+
+// TestUpdateMonitor_LLMProviderConfigsDeleted verifies that omitting a provider
+// config from the update array deletes it from the monitor.
+func TestUpdateMonitor_LLMProviderConfigsDeleted(t *testing.T) {
+	authMiddleware := jwtassertion.NewMockMiddleware(t)
+	mockChoreoClient := createBaseMockChoreoClient()
+	testClients := wiring.TestClients{OpenChoreoClient: mockChoreoClient}
+	app := apitestutils.MakeAppClientWithDeps(t, testClients, authMiddleware)
+
+	// Create monitor with two LLM configs
+	monitorName := uniqueMonitorName("llm-delete")
+	reqBody := spec.CreateMonitorRequest{
+		Name:            monitorName,
+		DisplayName:     "LLM Delete Test",
+		EnvironmentName: "dev",
+		Type:            "future",
+		IntervalMinutes: int32Ptr(60),
+		Evaluators:      []spec.MonitorEvaluator{{Identifier: "latency_performance", DisplayName: "Latency Check", Config: map[string]interface{}{}}},
+		LlmProviderConfigs: []spec.MonitorLLMProviderConfig{
+			{ProviderName: "openai", EnvVar: "OPENAI_API_KEY", Value: "sk-key-one"},
+			{ProviderName: "anthropic", EnvVar: "ANTHROPIC_API_KEY", Value: "anthropic-key-two"},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNotFound {
+		t.Skip("Skipping test - agent doesn't exist")
+		return
+	}
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	// Update with only the openai config (delete anthropic by omission)
+	updateBody := map[string]interface{}{
+		"llmProviderConfigs": []map[string]interface{}{
+			{"providerName": "openai", "envVar": "OPENAI_API_KEY", "value": ""},
+		},
+	}
+
+	body, _ = json.Marshal(updateBody)
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors/"+monitorName, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var result spec.MonitorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+
+	// Should only have the openai config remaining
+	require.Len(t, result.LlmProviderConfigs, 1)
+	assert.Equal(t, "openai", result.LlmProviderConfigs[0].ProviderName)
+}
+
+// TestUpdateMonitor_LLMProviderConfigsUpdated verifies that sending a non-empty
+// value replaces the secret with the new encrypted value.
+func TestUpdateMonitor_LLMProviderConfigsUpdated(t *testing.T) {
+	authMiddleware := jwtassertion.NewMockMiddleware(t)
+	mockChoreoClient := createBaseMockChoreoClient()
+	testClients := wiring.TestClients{OpenChoreoClient: mockChoreoClient}
+	app := apitestutils.MakeAppClientWithDeps(t, testClients, authMiddleware)
+
+	// Create monitor with LLM config
+	monitorName := uniqueMonitorName("llm-update")
+	reqBody := spec.CreateMonitorRequest{
+		Name:            monitorName,
+		DisplayName:     "LLM Update Secret Test",
+		EnvironmentName: "dev",
+		Type:            "future",
+		IntervalMinutes: int32Ptr(60),
+		Evaluators:      []spec.MonitorEvaluator{{Identifier: "latency_performance", DisplayName: "Latency Check", Config: map[string]interface{}{}}},
+		LlmProviderConfigs: []spec.MonitorLLMProviderConfig{
+			{ProviderName: "openai", EnvVar: "OPENAI_API_KEY", Value: "sk-old-key"},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code == http.StatusNotFound {
+		t.Skip("Skipping test - agent doesn't exist")
+		return
+	}
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	// Snapshot the encrypted value
+	var dbMonitorBefore models.Monitor
+	gdb := db.DB(context.Background())
+	require.NoError(t, gdb.Where("name = ? AND org_name = ?", monitorName, "test-org").First(&dbMonitorBefore).Error)
+	require.Len(t, dbMonitorBefore.LLMProviderConfigs, 1)
+	oldEncryptedValue := dbMonitorBefore.LLMProviderConfigs[0].Value
+
+	// Update with a new key value
+	updateBody := map[string]interface{}{
+		"llmProviderConfigs": []map[string]interface{}{
+			{"providerName": "openai", "envVar": "OPENAI_API_KEY", "value": "sk-brand-new-key"},
+		},
+	}
+
+	body, _ = json.Marshal(updateBody)
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/orgs/test-org/projects/test-project/agents/test-agent/monitors/"+monitorName, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// Verify DB has a different encrypted value (the new key, re-encrypted)
+	var dbMonitorAfter models.Monitor
+	require.NoError(t, gdb.Where("name = ? AND org_name = ?", monitorName, "test-org").First(&dbMonitorAfter).Error)
+	require.Len(t, dbMonitorAfter.LLMProviderConfigs, 1)
+	assert.NotEqual(t, oldEncryptedValue, dbMonitorAfter.LLMProviderConfigs[0].Value,
+		"New value should produce a different encrypted ciphertext")
+	assert.NotEqual(t, "sk-brand-new-key", dbMonitorAfter.LLMProviderConfigs[0].Value,
+		"DB should not store plaintext")
 }

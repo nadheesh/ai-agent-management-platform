@@ -80,3 +80,8 @@ __pycache__/
 .deepeval/
 .claude/
 local-scripts/
+
+website/
+docs/install/
+
+

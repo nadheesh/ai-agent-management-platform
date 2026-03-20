@@ -283,7 +283,9 @@ install_evaluation_workflows() {
         --namespace openchoreo-workflow-plane \
         --set ampEvaluation.image.repository="amp-evaluation-monitor" \
         --set ampEvaluation.publisher.endpoint="http://agent-manager-service:8080" \
-        --set ampEvaluation.publisher.apiKey="dev-publisher-api-key"
+        --set ampEvaluation.publisher.idpTokenUrl="http://thunder.amp-thunder.svc.cluster.local:8090/oauth2/token" \
+        --set ampEvaluation.publisher.clientId="amp-publisher-client" \
+        --set ampEvaluation.publisher.clientSecret="amp-publisher-client-secret"
     echo "✅ Evaluation Workflows Extension installed/upgraded successfully"
 }
 

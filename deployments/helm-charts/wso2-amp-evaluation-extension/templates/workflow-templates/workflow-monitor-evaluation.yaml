@@ -76,8 +76,10 @@ spec:
             value: ${parameters.publishing.runId}
           - name: publisher-endpoint
             value: {{ .Values.ampEvaluation.publisher.endpoint | quote }}
-          - name: publisher-api-key
-            value: {{ .Values.ampEvaluation.publisher.apiKey | quote }}
+          - name: idp-token-url
+            value: {{ .Values.ampEvaluation.publisher.idpTokenUrl | quote }}
+          - name: idp-client-id
+            value: {{ .Values.ampEvaluation.publisher.clientId | quote }}
       workflowTemplateRef:
         clusterScope: true
         name: amp-monitor-evaluation

@@ -80,8 +80,6 @@ spec:
             value: {{ .Values.ampEvaluation.publisher.idpTokenUrl | quote }}
           - name: idp-client-id
             value: {{ .Values.ampEvaluation.publisher.clientId | quote }}
-          - name: idp-client-secret
-            value: {{ .Values.ampEvaluation.publisher.clientSecret | quote }}
       workflowTemplateRef:
         clusterScope: true
         name: amp-monitor-evaluation

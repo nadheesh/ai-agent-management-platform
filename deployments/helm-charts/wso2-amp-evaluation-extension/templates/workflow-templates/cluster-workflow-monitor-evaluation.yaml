@@ -27,7 +27,6 @@ spec:
         value: "[]"
       - name: idp-token-url
       - name: idp-client-id
-      - name: idp-client-secret
   templates:
     - name: run-monitor
       container:
@@ -54,7 +53,10 @@ spec:
           - name: IDP_CLIENT_ID
             value: '{{ "{{" }}workflow.parameters.idp-client-id{{ "}}" }}'
           - name: IDP_CLIENT_SECRET
-            value: '{{ "{{" }}workflow.parameters.idp-client-secret{{ "}}" }}'
+            valueFrom:
+              secretKeyRef:
+                name: amp-publisher-credentials
+                key: client-secret
         resources:
           requests:
             cpu: "100m"

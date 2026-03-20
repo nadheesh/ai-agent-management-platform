@@ -134,7 +134,7 @@ thunder:
     # AMP Publisher Client configuration (for evaluation job to publish scores)
     ampPublisherClient:
       clientId: "amp-publisher-client"
-      clientSecret: "amp-publisher-client-secret"
+      clientSecret: "amp-publisher-client-secret"  # Override in production; must match ampEvaluation.publisher.clientSecret in wso2-amp-evaluation-extension
       name: "AMP Publisher Client"
       description: "Client application for evaluation job to publish scores"
       authFlowGraphId: "auth_flow_config_basic"

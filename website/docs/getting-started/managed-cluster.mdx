@@ -659,16 +659,23 @@ helm install amp-evaluation-extension \
   --timeout 1800s
 ```
 
-**Note:** The Evaluation Extension uses OAuth2 client credentials (via the AMP Publisher Client created by Thunder) to authenticate when publishing scores to the Agent Manager. The default credentials match the Thunder bootstrap configuration. If you customized the Thunder bootstrap `ampPublisherClient` settings, override them here:
+**Note:** The Evaluation Extension uses OAuth2 client credentials (via the AMP Publisher Client registered by the Thunder Extension) to authenticate when publishing scores to the Agent Manager. The `clientId`, `idpTokenUrl`, and `clientSecret` must match the `ampPublisherClient` settings used when installing the Thunder Extension. Pass the client secret via a values file to avoid exposing it in shell history:
+
+```yaml
+# publisher-auth-values.yaml
+ampEvaluation:
+  publisher:
+    idpTokenUrl: "http://thunder.amp-thunder.svc.cluster.local:8090/oauth2/token"
+    clientId: "amp-publisher-client"
+    clientSecret: "<your-publisher-client-secret>"
+```
 
 ```bash
 helm install amp-evaluation-extension \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
   --version 0.9.0 \
   --namespace ${BUILD_CI_NS} \
-  --set ampEvaluation.publisher.idpTokenUrl="http://thunder.amp-thunder.svc.cluster.local:8090/oauth2/token" \
-  --set ampEvaluation.publisher.clientId="amp-publisher-client" \
-  --set ampEvaluation.publisher.clientSecret="amp-publisher-client-secret" \
+  --values publisher-auth-values.yaml \
   --timeout 1800s
 ```
 

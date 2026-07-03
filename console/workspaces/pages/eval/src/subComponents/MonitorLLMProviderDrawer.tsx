@@ -50,7 +50,6 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import {
-  ArrowLeft,
   Check,
   Circle,
   Coins,
@@ -500,15 +499,6 @@ export function MonitorLLMProviderDrawer({
           </Stack>
         ) : (
           <Stack spacing={2}>
-            <Button
-              variant="text"
-              size="small"
-              startIcon={<ArrowLeft size={16} />}
-              onClick={() => setMode("list")}
-              sx={{ alignSelf: "flex-start" }}
-            >
-              Back to providers
-            </Button>
             <Typography variant="body2" color="text.secondary">
               Create an LLM provider for this monitor&apos;s LLM-judge
               evaluators. It will be added to your organization&apos;s
